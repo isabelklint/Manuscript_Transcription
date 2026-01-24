@@ -102,7 +102,7 @@ const App: React.FC = () => {
 
     // Entries
     entries.forEach(entry => {
-      // The user's requested format: <page=ID line=NUM><old_maz>...</old_maz> ... </page><note>...</note>
+      // User format: <page=ID line=NUM><old_maz>...</old_maz> ... </page><note>...</note>
       let lineXml = `<page=${entry.page} line=${entry.line}>`;
       
       lineXml += `<old_maz>${entry.old_maz}</old_maz>`;
@@ -128,7 +128,7 @@ const App: React.FC = () => {
 
       lineXml += `</page>`;
 
-      // Notes are placed outside the page tag in the user's example
+      // Notes outside the page tag
       entry.notes.forEach(note => {
         if (note.text) {
           lineXml += `<note>${note.text}</note>`;
