@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, GENRE_OPTIONS } from './types';
 import MetadataForm from './components/MetadataForm';
@@ -8,14 +7,14 @@ import XMLPreview from './components/XMLPreview';
 const INITIAL_METADATA: Metadata = {
   docName: 'Unnamed Manuscript',
   date: 'c.1830s',
-  genre: GENRE_OPTIONS[0],
+  genre: 'accounts',
   author: 'Ygnacio Arrona',
   source: 'at UVA: UVA MSS 01784, From: Gates collection, 941 Manuscript',
 };
 
 const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => ({
   id: crypto.randomUUID(),
-  page: lastEntry?.page || '000000000_0000',
+  page: lastEntry?.page || '000032278_0004',
   line: lastEntry ? (parseFloat(lastEntry.line) + 1).toFixed(1) : '1.1',
   old_maz: '',
   new_maz: '',
@@ -29,7 +28,7 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => (
 
 const App: React.FC = () => {
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('transcription_data_v3');
+    const saved = localStorage.getItem('transcription_data_v4');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -44,7 +43,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('transcription_data_v3', JSON.stringify(state));
+    localStorage.setItem('transcription_data_v4', JSON.stringify(state));
   }, [state]);
 
   const updateMetadata = (field: keyof Metadata, value: string) => {
@@ -84,7 +83,7 @@ const App: React.FC = () => {
     const newEntry = { 
       ...entryToDuplicate, 
       id: crypto.randomUUID(),
-      line: (parseFloat(entryToDuplicate.line) + 0.1).toFixed(1)
+      line: (parseFloat(entryToDuplicate.line) + 1.0).toFixed(1)
     };
     const newEntries = [...state.entries];
     newEntries.splice(entryIndex + 1, 0, newEntry);
@@ -93,29 +92,23 @@ const App: React.FC = () => {
 
   const generatedXML = useMemo(() => {
     const { metadata, entries } = state;
-    
-    let xml = `<encodingDesc>\n  <classDecl>\n    <taxonomy xml:id="noteTypes">\n`;
-    NOTE_TYPES.forEach(nt => {
-      xml += `      <category xml:id="${nt.id}"><catDesc>${nt.desc}</catDesc></category>\n`;
-    });
-    xml += `    </taxonomy>\n  </classDecl>\n</encodingDesc>\n\n`;
+    let xml = '';
 
-    xml += `<title>${metadata.docName}</title>\n`;
+    // Metadata Block
     xml += `<date>${metadata.date}</date>\n`;
     xml += `<genre>${metadata.genre}</genre>\n`;
     xml += `<author>${metadata.author}</author>\n`;
     xml += `<source>${metadata.source}</source>\n\n`;
 
+    // Entries
     entries.forEach(entry => {
+      // The user's requested format: <page=ID line=NUM><old_maz>...</old_maz> ... </page><note>...</note>
       let lineXml = `<page=${entry.page} line=${entry.line}>`;
+      
       lineXml += `<old_maz>${entry.old_maz}</old_maz>`;
       
       if (entry.new_maz) {
         lineXml += ` <new_maz>${entry.new_maz}</new_maz>`;
-      }
-
-      if (entry.ipa) {
-        lineXml += `<ipa>${entry.ipa}</ipa>`;
       }
 
       entry.old_spa.forEach(spa => {
@@ -135,14 +128,10 @@ const App: React.FC = () => {
 
       lineXml += `</page>`;
 
-      if (entry.kirk_set) {
-        lineXml += `<kirk_set>${entry.kirk_set}</kirk_set>`;
-      }
-
+      // Notes are placed outside the page tag in the user's example
       entry.notes.forEach(note => {
         if (note.text) {
-          const respAttr = note.resp ? ` resp="${note.resp.startsWith('#') ? note.resp : '#' + note.resp}"` : '';
-          lineXml += `<note type="${note.type}"${respAttr}>${note.text}</note>`;
+          lineXml += `<note>${note.text}</note>`;
         }
       });
 
@@ -157,7 +146,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${state.metadata.docName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xml`;
+    a.download = `transcription_${new Date().toISOString().split('T')[0]}.xml`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -178,12 +167,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left Panel: Input Forms */}
       <div className="flex-1 p-6 lg:p-10 overflow-y-auto bg-white border-r border-slate-200">
         <header className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Manuscript Transcription</h1>
-            <p className="text-slate-500 mt-1">Linguistic encoding tool with categorized metadata.</p>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Transcription Tool</h1>
+            <p className="text-slate-500 mt-1">Linguistic encoding without manual tagging.</p>
           </div>
           <button 
             onClick={handleClear}
@@ -196,7 +184,7 @@ const App: React.FC = () => {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">1</div>
-            <h2 className="text-xl font-semibold text-slate-800">Document Metadata</h2>
+            <h2 className="text-xl font-semibold text-slate-800">Metadata</h2>
           </div>
           <MetadataForm metadata={state.metadata} onChange={updateMetadata} />
         </section>
@@ -205,13 +193,13 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">2</div>
-              <h2 className="text-xl font-semibold text-slate-800">Entries</h2>
+              <h2 className="text-xl font-semibold text-slate-800">Lines</h2>
             </div>
             <button
               onClick={addEntry}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-md shadow-blue-100"
             >
-              <i className="fa-solid fa-plus"></i> Add Entry
+              <i className="fa-solid fa-plus"></i> Add Line
             </button>
           </div>
 
@@ -239,11 +227,10 @@ const App: React.FC = () => {
         </section>
       </div>
 
-      {/* Right Panel: XML Preview */}
       <div className="lg:w-[450px] xl:w-[600px] h-screen lg:sticky lg:top-0 bg-slate-900 flex flex-col">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center">
           <h3 className="text-slate-200 font-semibold flex items-center gap-2">
-            <i className="fa-solid fa-code text-blue-400"></i> Live XML Preview
+            <i className="fa-solid fa-code text-blue-400"></i> XML Output
           </h3>
           <div className="flex gap-2">
             <button
