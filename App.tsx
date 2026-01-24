@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, GENRE_OPTIONS } from './types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Metadata, TranscriptionEntry, TranscriptionState } from './types';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
@@ -28,7 +28,7 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => (
 
 const App: React.FC = () => {
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('transcription_data_v4');
+    const saved = localStorage.getItem('transcription_data_v6');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -43,7 +43,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('transcription_data_v4', JSON.stringify(state));
+    localStorage.setItem('transcription_data_v6', JSON.stringify(state));
   }, [state]);
 
   const updateMetadata = (field: keyof Metadata, value: string) => {
@@ -102,9 +102,10 @@ const App: React.FC = () => {
 
     // Entries
     entries.forEach(entry => {
-      // User format: <page=ID line=NUM><old_maz>...</old_maz> ... </page><note>...</note>
+      // User format: <page=ID line=NUM><old_maz>...</old_maz>...<eng_gloss>...</eng_gloss></page><note>...</note>
       let lineXml = `<page=${entry.page} line=${entry.line}>`;
       
+      // Use single bracket for the first tag inside page as per standard XML
       lineXml += `<old_maz>${entry.old_maz}</old_maz>`;
       
       if (entry.new_maz) {
@@ -128,7 +129,7 @@ const App: React.FC = () => {
 
       lineXml += `</page>`;
 
-      // Notes outside the page tag
+      // Notes go outside the page tag
       entry.notes.forEach(note => {
         if (note.text) {
           lineXml += `<note>${note.text}</note>`;
@@ -157,7 +158,7 @@ const App: React.FC = () => {
   };
 
   const handleClear = () => {
-    if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+    if (confirm('Are you sure you want to clear all transcription data?')) {
       setState({
         metadata: INITIAL_METADATA,
         entries: [createNewEntry()],
@@ -166,44 +167,50 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto bg-white border-r border-slate-200">
-        <header className="mb-8 flex justify-between items-center">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50">
+      <div className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto bg-white border-r border-slate-200">
+        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Transcription Tool</h1>
-            <p className="text-slate-500 mt-1">Linguistic encoding without manual tagging.</p>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Manuscript Transcriber</h1>
+            <p className="text-slate-500 mt-1 font-medium">Generate linguistic XML without manual tag entry.</p>
           </div>
-          <button 
-            onClick={handleClear}
-            className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors flex items-center gap-2"
-          >
-            <i className="fa-solid fa-trash-can"></i> Clear All
-          </button>
+          <div className="flex gap-3 w-full md:w-auto">
+            <button 
+              onClick={handleClear}
+              className="flex-1 md:flex-none px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 border border-red-100 rounded-lg transition-all flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-eraser"></i> Reset
+            </button>
+          </div>
         </header>
 
-        <section className="mb-10">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">1</div>
-            <h2 className="text-xl font-semibold text-slate-800">Metadata</h2>
+        <section className="mb-12">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-100">
+              <i className="fa-solid fa-file-invoice"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800">Metadata</h2>
           </div>
           <MetadataForm metadata={state.metadata} onChange={updateMetadata} />
         </section>
 
-        <section className="mb-20">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">2</div>
-              <h2 className="text-xl font-semibold text-slate-800">Lines</h2>
+        <section className="mb-24">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-100">
+                <i className="fa-solid fa-list-check"></i>
+              </div>
+              <h2 className="text-2xl font-bold text-slate-800">Entries</h2>
             </div>
             <button
               onClick={addEntry}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-md shadow-blue-100"
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-200 hover:-translate-y-0.5"
             >
-              <i className="fa-solid fa-plus"></i> Add Line
+              <i className="fa-solid fa-plus"></i> Add New Entry
             </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-8">
             {state.entries.map((entry, index) => (
               <EntryItem
                 key={entry.id}
@@ -216,38 +223,51 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-8 flex justify-center">
+          <div className="mt-12 flex justify-center">
             <button
               onClick={addEntry}
-              className="flex items-center gap-2 px-8 py-3 border-2 border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-500 rounded-xl font-medium transition-all"
+              className="group flex flex-col items-center gap-3 px-12 py-8 border-2 border-dashed border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/30 rounded-2xl transition-all w-full"
             >
-              <i className="fa-solid fa-plus"></i> Append New Line
+              <div className="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                <i className="fa-solid fa-plus text-xl"></i>
+              </div>
+              <span className="font-bold tracking-wide">CLICK TO APPEND NEXT LINE</span>
             </button>
           </div>
         </section>
       </div>
 
-      <div className="lg:w-[450px] xl:w-[600px] h-screen lg:sticky lg:top-0 bg-slate-900 flex flex-col">
-        <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-slate-200 font-semibold flex items-center gap-2">
-            <i className="fa-solid fa-code text-blue-400"></i> XML Output
-          </h3>
+      <div className="lg:w-[500px] xl:w-[650px] h-screen lg:sticky lg:top-0 bg-[#0f172a] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.1)]">
+        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#0f172a]/80 backdrop-blur-xl z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <i className="fa-solid fa-terminal text-blue-400 text-sm"></i>
+            </div>
+            <h3 className="text-white font-bold tracking-tight">
+              XML Preview
+            </h3>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={handleCopy}
-              className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md transition-colors"
+              className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all flex items-center gap-2 border border-white/10"
             >
-              <i className="fa-solid fa-copy mr-1.5"></i> Copy
+              <i className="fa-solid fa-copy"></i> Copy
             </button>
             <button
               onClick={handleDownload}
-              className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors"
+              className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20"
             >
-              <i className="fa-solid fa-download mr-1.5"></i> Download
+              <i className="fa-solid fa-download"></i> Download
             </button>
           </div>
         </div>
-        <XMLPreview content={generatedXML} />
+        <div className="flex-1 overflow-hidden">
+          <XMLPreview content={generatedXML} />
+        </div>
+        <div className="p-4 bg-white/5 border-t border-white/10 text-[10px] text-slate-500 text-center font-mono">
+          Ready for copy-paste into your main document
+        </div>
       </div>
     </div>
   );
