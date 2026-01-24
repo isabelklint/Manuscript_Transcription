@@ -1,0 +1,5 @@
+{
+  "name": "Linguistic Transcription XML Generator",
+  "description": "A high-performance tool for transcribing historical and linguistic manuscripts into a specific XML format without manual tag entry. Features metadata management, dynamic entry rows, and real-time XML generation.",
+  "requestFramePermissions": []
+}
