@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Metadata, TranscriptionEntry, TranscriptionState } from './types';
 import MetadataForm from './components/MetadataForm';
@@ -103,7 +102,7 @@ const App: React.FC = () => {
 
     // Entries
     entries.forEach(entry => {
-      // Custom attribute format: <page=ID line=NUM>
+      // Custom attribute format without quotes as requested
       let lineXml = `<page=${entry.page} line=${entry.line}>`;
       
       lineXml += `<old_maz>${entry.old_maz}</old_maz>`;
@@ -129,7 +128,7 @@ const App: React.FC = () => {
 
       lineXml += `</page>`;
 
-      // Analytical notes go outside the page tag
+      // Notes go outside the page tag
       entry.notes.forEach(note => {
         if (note.text) {
           lineXml += `<note>${note.text}</note>`;
@@ -210,7 +209,7 @@ const App: React.FC = () => {
         </section>
       </div>
 
-      <aside className="w-full lg:w-[450px] bg-slate-900 flex flex-col h-screen sticky top-0 overflow-hidden">
+      <aside className="w-full lg:w-[450px] bg-slate-900 flex flex-col h-screen sticky top-0 overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
           <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">03. XML Output</h2>
           <div className="flex gap-2">
@@ -234,5 +233,4 @@ const App: React.FC = () => {
   );
 };
 
-// Fix the missing default export error
 export default App;
