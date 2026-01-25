@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Metadata, TranscriptionEntry, TranscriptionState } from './types';
 import MetadataForm from './components/MetadataForm';
@@ -7,7 +8,7 @@ import XMLPreview from './components/XMLPreview';
 const INITIAL_METADATA: Metadata = {
   docName: 'Unnamed Manuscript',
   date: 'c.1830s',
-  genre: 'accounts',
+  genre: 'Vocabularios (Dictionaries/Word Lists)',
   author: 'Ygnacio Arrona',
   source: 'at UVA: UVA MSS 01784, From: Gates collection, 941 Manuscript',
 };
@@ -28,7 +29,7 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => (
 
 const App: React.FC = () => {
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('transcription_data_v7');
+    const saved = localStorage.getItem('transcription_data_final_v1');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -43,7 +44,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('transcription_data_v7', JSON.stringify(state));
+    localStorage.setItem('transcription_data_final_v1', JSON.stringify(state));
   }, [state]);
 
   const updateMetadata = (field: keyof Metadata, value: string) => {
@@ -102,7 +103,7 @@ const App: React.FC = () => {
 
     // Entries
     entries.forEach(entry => {
-      // User format: <page=ID line=NUM><old_maz>...</old_maz> <new_maz>...</new_maz><old_spa>...</old_spa>...
+      // Custom attribute format: <page=ID line=NUM>
       let lineXml = `<page=${entry.page} line=${entry.line}>`;
       
       lineXml += `<old_maz>${entry.old_maz}</old_maz>`;
@@ -128,7 +129,7 @@ const App: React.FC = () => {
 
       lineXml += `</page>`;
 
-      // Analytical notes go OUTSIDE the page tag per requested format
+      // Analytical notes go outside the page tag
       entry.notes.forEach(note => {
         if (note.text) {
           lineXml += `<note>${note.text}</note>`;
@@ -146,7 +147,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `transcription_${new Date().toISOString().split('T')[0]}.xml`;
+    a.download = `transcription.xml`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -156,57 +157,34 @@ const App: React.FC = () => {
     alert('Copied to clipboard!');
   };
 
-  const handleClear = () => {
-    if (confirm('Are you sure you want to clear all data?')) {
-      setState({
-        metadata: INITIAL_METADATA,
-        entries: [createNewEntry()],
-      });
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50">
-      <div className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto bg-white border-r border-slate-200">
-        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex-1 p-6 lg:p-12 overflow-y-auto bg-white border-r border-slate-200">
+        <header className="mb-10 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Manuscript Transcriber</h1>
-            <p className="text-slate-500 mt-1 font-medium">Linguistic XML generation without manual tags.</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Manuscript Transcriber</h1>
+            <p className="text-slate-400 text-xs mt-1">Linguistic XML Pipeline</p>
           </div>
           <button 
-            onClick={handleClear}
-            className="px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 border border-red-100 rounded-lg transition-all flex items-center justify-center gap-2"
+            onClick={() => confirm('Reset?') && setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] })}
+            className="text-xs font-bold text-red-500 uppercase"
           >
-            <i className="fa-solid fa-eraser"></i> Reset Data
+            Clear All
           </button>
         </header>
 
         <section className="mb-12">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-100">
-              <i className="fa-solid fa-file-invoice"></i>
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800">1. Document Metadata</h2>
+          <div className="flex items-center gap-2 mb-6">
+            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest bg-blue-50 px-2 py-1 rounded">01. Metadata</h2>
           </div>
           <MetadataForm metadata={state.metadata} onChange={updateMetadata} />
         </section>
 
         <section className="mb-24">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-100">
-                <i className="fa-solid fa-list-check"></i>
-              </div>
-              <h2 className="text-2xl font-bold text-slate-800">2. Transcription Entries</h2>
-            </div>
-            <button
-              onClick={addEntry}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg"
-            >
-              <i className="fa-solid fa-plus"></i> Add Entry
-            </button>
+          <div className="flex items-center gap-2 mb-8">
+            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest bg-emerald-50 px-2 py-1 rounded">02. Transcription</h2>
           </div>
-
+          
           <div className="space-y-8">
             {state.entries.map((entry, index) => (
               <EntryItem
@@ -220,46 +198,41 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-12 flex justify-center">
-            <button
-              onClick={addEntry}
-              className="group flex flex-col items-center gap-3 px-12 py-8 border-2 border-dashed border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/30 rounded-2xl transition-all w-full"
-            >
-              <div className="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
-                <i className="fa-solid fa-plus text-xl"></i>
-              </div>
-              <span className="font-bold tracking-wide">CLICK TO ADD NEXT LINE</span>
-            </button>
-          </div>
+          <button
+            onClick={addEntry}
+            className="w-full mt-12 py-8 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+              <i className="fa-solid fa-plus text-sm"></i>
+            </div>
+            <span className="text-xs font-black uppercase tracking-widest">Add New Transcription Line</span>
+          </button>
         </section>
       </div>
 
-      <div className="lg:w-[500px] xl:w-[650px] h-screen lg:sticky lg:top-0 bg-[#0f172a] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.1)]">
-        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#0f172a]/80 backdrop-blur-xl z-10">
-          <h3 className="text-white font-bold flex items-center gap-3">
-            <i className="fa-solid fa-terminal text-blue-400"></i> Output XML
-          </h3>
+      <aside className="w-full lg:w-[450px] bg-slate-900 flex flex-col h-screen sticky top-0 overflow-hidden">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
+          <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">03. XML Output</h2>
           <div className="flex gap-2">
-            <button
+            <button 
               onClick={handleCopy}
-              className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all border border-white/10"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold uppercase transition-colors"
             >
               Copy
             </button>
-            <button
+            <button 
               onClick={handleDownload}
-              className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold uppercase transition-colors"
             >
-              Download .xml
+              Download
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <XMLPreview content={generatedXML} />
-        </div>
-      </div>
+        <XMLPreview content={generatedXML} />
+      </aside>
     </div>
   );
 };
 
+// Fix the missing default export error
 export default App;
