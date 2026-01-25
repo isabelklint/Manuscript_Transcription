@@ -1,11 +1,3 @@
-
-export interface OldSpaEntry {
-  id: string;
-  text: string;
-  note?: string;
-  uncertain?: boolean;
-}
-
 export interface NoteEntry {
   id: string;
   type: string;
@@ -13,50 +5,47 @@ export interface NoteEntry {
   text: string;
 }
 
+export interface VariantEntry {
+  usg: string; // v.l.
+  orig: string;
+  norm: string;
+}
+
 export interface TranscriptionEntry {
   id: string;
-  page: string;
-  column: "1" | "2";
+  column: '1' | '2';
   line: string;
-  maz_orig: string;
-  maz_norm: string;
+  old_maz: string;
+  new_maz: string;
   uncertain_maz?: boolean;
-  spa_orig: string;
-  spa_norm: string;
+  old_spa: string;
+  new_spa: string;
   uncertain_spa?: boolean;
   eng_gloss: string;
   uncertain_eng?: boolean;
-  // Variants
-  has_variant?: boolean;
-  variant_maz_orig?: string;
-  variant_maz_norm?: string;
+  ipa?: string;
+  kirk_set?: string;
+  variant?: VariantEntry;
   notes: NoteEntry[];
 }
 
 export interface Metadata {
-  title: string;
+  title_orig: string;
+  title_norm: string;
+  title_gloss: string;
   author: string;
   editor: string;
   affiliation: string;
-  date: string;
-  publisher: string;
+  pub_date: string;
   settlement: string;
   institution: string;
   repository: string;
   shelfmark: string;
   collection: string;
-  msContentsTitle: string;
-  msContentsNote: string;
   summary: string;
-  mainLang: string;
-  otherLangs: string;
-  physForm: string;
-  physExtent: string;
-  physLayout: string;
-  handNote: string;
-  origDate: string;
-  origPlace: string;
-  projectDesc: string;
+  orig_date: string;
+  orig_place: string;
+  pb_n: string; // Page break ID
 }
 
 export interface TranscriptionState {
@@ -65,10 +54,10 @@ export interface TranscriptionState {
 }
 
 export const NOTE_TYPES = [
-  { id: 'editorial', desc: 'Transcription decisions' },
-  { id: 'linguistic', desc: 'Comparative/reconstructed' },
-  { id: 'layout', desc: 'Physical arrangement' },
-  { id: 'orthographic', desc: 'Spelling/graphemes' },
-  { id: 'historical', desc: 'Contextual info' },
+  { id: 'editorial', desc: 'Transcription decisions and uncertainties' },
+  { id: 'linguistic', desc: 'Comparative and reconstructed forms' },
+  { id: 'layout', desc: 'Physical arrangement on manuscript page' },
+  { id: 'orthographic', desc: 'Spelling conventions and grapheme interpretation' },
+  { id: 'historical', desc: 'Context about period, author, colonial usage' },
   { id: 'semantic', desc: 'Meaning clarifications' },
 ];
