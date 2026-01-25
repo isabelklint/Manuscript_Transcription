@@ -28,12 +28,12 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => (
 
 const App: React.FC = () => {
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('manuscript_editor_state_v1');
+    const saved = localStorage.getItem('manuscript_v2_storage');
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        console.error("Failed to load state", e);
+        console.error("Failed to load saved state", e);
       }
     }
     return {
@@ -43,7 +43,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('manuscript_editor_state_v1', JSON.stringify(state));
+    localStorage.setItem('manuscript_v2_storage', JSON.stringify(state));
   }, [state]);
 
   const updateMetadata = (field: keyof Metadata, value: string) => {
@@ -110,11 +110,9 @@ const App: React.FC = () => {
       if (entry.new_maz) {
         lineXml += ` <new_maz>${entry.new_maz}</new_maz>`;
       }
-
       if (entry.ipa) {
         lineXml += ` <ipa>${entry.ipa}</ipa>`;
       }
-
       if (entry.kirk_set) {
         lineXml += ` <kirk_set>${entry.kirk_set}</kirk_set>`;
       }
@@ -129,7 +127,6 @@ const App: React.FC = () => {
       if (entry.new_spa) {
         lineXml += `<new_spa>${entry.new_spa}</new_spa>`;
       }
-
       if (entry.eng_gloss) {
         lineXml += `<eng_gloss>${entry.eng_gloss}</eng_gloss>`;
       }
@@ -154,8 +151,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const fileName = state.metadata.docName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-    a.download = `${fileName || 'transcription'}.xml`;
+    const fileName = state.metadata.docName.toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'transcription';
+    a.download = `${fileName}.xml`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -167,18 +164,17 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50">
-      {/* Editor Side */}
       <div className="flex-1 p-6 lg:p-12 overflow-y-auto bg-white border-r border-slate-200">
         <header className="mb-10 flex justify-between items-center border-b border-slate-100 pb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Manuscript Editor</h1>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Linguistic Transcription Suite</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Manuscript Transcriber</h1>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Linguistic XML Pipeline</p>
           </div>
           <button 
-            onClick={() => confirm('Clear all data?') && setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] })}
-            className="text-[10px] font-black text-red-500 uppercase px-3 py-2 hover:bg-red-50 rounded-lg transition-colors"
+            onClick={() => confirm('Reset current progress?') && setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] })}
+            className="text-[10px] font-black text-red-500 uppercase px-3 py-2 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
           >
-            Clear All
+            Reset Session
           </button>
         </header>
 
@@ -209,36 +205,25 @@ const App: React.FC = () => {
 
           <button
             onClick={addEntry}
-            className="w-full mt-12 py-10 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all group"
+            className="w-full mt-12 py-12 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all group"
           >
-            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors shadow-sm">
               <i className="fa-solid fa-plus text-sm"></i>
             </div>
-            <span className="text-[11px] font-black uppercase tracking-widest">Add New Transcription Line</span>
+            <span className="text-[11px] font-black uppercase tracking-widest">New Entry Line</span>
           </button>
         </section>
       </div>
 
-      {/* Preview Side */}
       <aside className="w-full lg:w-[480px] bg-slate-900 flex flex-col h-screen sticky top-0 overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 backdrop-blur shrink-0">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 backdrop-blur shrink-0 z-10">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Generated XML</h2>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Live Output</h2>
           </div>
           <div className="flex gap-2">
-            <button 
-              onClick={handleCopy}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-            >
-              Copy
-            </button>
-            <button 
-              onClick={handleDownload}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-900/40"
-            >
-              Download
-            </button>
+            <button onClick={handleCopy} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">Copy</button>
+            <button onClick={handleDownload} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-900/40">Download</button>
           </div>
         </div>
         <XMLPreview content={generatedXML} />
