@@ -3,50 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manuscript Transcription Tool</title>
+    <title>TEI P5 Manuscript Editor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
-        
-        :root {
-            --slate-50: #f8fafc;
-            --slate-100: #f1f5f9;
-            --slate-900: #0f172a;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--slate-50);
-            color: var(--slate-900);
-        }
-
-        .code-font {
-            font-family: 'Fira Code', monospace;
-        }
-
-        /* Smooth scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--slate-50);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-
-        /* Focused input styling */
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Fira+Code:wght@400;500&display=swap');
+        :root { --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-900: #0f172a; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--slate-50); color: var(--slate-900); }
+        .code-font { font-family: 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); }
     </style>
-
+<script type="importmap">
+{
+  "imports": {
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
 </script>
 </head>
 <body>

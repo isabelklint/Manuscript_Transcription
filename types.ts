@@ -3,6 +3,7 @@ export interface OldSpaEntry {
   id: string;
   text: string;
   note?: string;
+  uncertain?: boolean;
 }
 
 export interface NoteEntry {
@@ -15,23 +16,47 @@ export interface NoteEntry {
 export interface TranscriptionEntry {
   id: string;
   page: string;
+  column: "1" | "2";
   line: string;
-  old_maz: string;
-  new_maz?: string;
-  ipa?: string;
-  kirk_set?: string;
-  old_spa: OldSpaEntry[];
-  new_spa?: string;
-  eng_gloss?: string;
+  maz_orig: string;
+  maz_norm: string;
+  uncertain_maz?: boolean;
+  spa_orig: string;
+  spa_norm: string;
+  uncertain_spa?: boolean;
+  eng_gloss: string;
+  uncertain_eng?: boolean;
+  // Variants
+  has_variant?: boolean;
+  variant_maz_orig?: string;
+  variant_maz_norm?: string;
   notes: NoteEntry[];
 }
 
 export interface Metadata {
-  docName: string;
-  date: string;
-  genre: string;
+  title: string;
   author: string;
-  source: string;
+  editor: string;
+  affiliation: string;
+  date: string;
+  publisher: string;
+  settlement: string;
+  institution: string;
+  repository: string;
+  shelfmark: string;
+  collection: string;
+  msContentsTitle: string;
+  msContentsNote: string;
+  summary: string;
+  mainLang: string;
+  otherLangs: string;
+  physForm: string;
+  physExtent: string;
+  physLayout: string;
+  handNote: string;
+  origDate: string;
+  origPlace: string;
+  projectDesc: string;
 }
 
 export interface TranscriptionState {
@@ -40,21 +65,10 @@ export interface TranscriptionState {
 }
 
 export const NOTE_TYPES = [
-  { id: 'editorial', desc: 'Transcription decisions and uncertainties' },
-  { id: 'linguistic', desc: 'Comparative and reconstructed forms' },
-  { id: 'layout', desc: 'Physical arrangement on manuscript page' },
-  { id: 'orthographic', desc: 'Spelling conventions and grapheme interpretation' },
+  { id: 'editorial', desc: 'Transcription decisions' },
+  { id: 'linguistic', desc: 'Comparative/reconstructed' },
+  { id: 'layout', desc: 'Physical arrangement' },
+  { id: 'orthographic', desc: 'Spelling/graphemes' },
+  { id: 'historical', desc: 'Contextual info' },
   { id: 'semantic', desc: 'Meaning clarifications' },
-  { id: 'historical', desc: 'Context about period, author, colonial usage' },
-  { id: 'gloss', desc: 'Unclear or archaic Spanish glosses' },
-  { id: 'phonological', desc: 'Sound correspondences, tone reconstruction' },
-  { id: 'morphological', desc: 'Word structure analysis' },
-  { id: 'cross-reference', desc: 'Links to other entries' },
-];
-
-export const GENRE_OPTIONS = [
-  "Vocabularios (Dictionaries/Word Lists)",
-  "Confesionarios (Confession Manuals)",
-  "Doctrinas Cristianas (Christian Catechisms)",
-  "Phraseological Manuals"
 ];
