@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { TranscriptionEntry, NoteEntry, NOTE_TYPES, AbbreviationPair } from '../types';
+import React from 'react';
+import { TranscriptionEntry, NoteEntry, NOTE_TYPES } from '../types';
 
 interface Props {
   entry: TranscriptionEntry;
@@ -27,24 +27,10 @@ const UncertainBox = ({ label, active, onChange }: { label: string, active: bool
 );
 
 const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplicate }) => {
-  const [newAbbr, setNewAbbr] = useState({ find: '', replace: '' });
-
-  // Default new notes to 'none' type
-  const addNote = () => onUpdate({ notes: [...entry.notes, { id: crypto.randomUUID(), type: 'none', resp: 'IK', text: '' }] });
+  // Default new notes to 'editorial' type
+  const addNote = () => onUpdate({ notes: [...entry.notes, { id: crypto.randomUUID(), type: 'editorial', resp: 'IK', text: '' }] });
   const updateNote = (id: string, u: Partial<NoteEntry>) => onUpdate({ notes: entry.notes.map(n => n.id === id ? { ...n, ...u } : n) });
   const removeNote = (id: string) => onUpdate({ notes: entry.notes.filter(n => n.id !== id) });
-
-  const addAbbreviation = () => {
-    if (!newAbbr.find.trim() || !newAbbr.replace.trim()) return;
-    onUpdate({ 
-      abbreviations: [...(entry.abbreviations || []), { id: crypto.randomUUID(), ...newAbbr }] 
-    });
-    setNewAbbr({ find: '', replace: '' });
-  };
-
-  const removeAbbreviation = (id: string) => {
-    onUpdate({ abbreviations: entry.abbreviations.filter(a => a.id !== id) });
-  };
 
   const toggleVariant = () => {
     if (entry.variant) {
@@ -203,46 +189,7 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
         </div>
       </div>
 
-      <div className="px-5 pb-4 border-t border-slate-50 pt-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <div className="flex justify-between items-center mb-2">
-             <h5 className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-               <i className="fa-solid fa-compress text-blue-400"></i>
-               Smart Contractions (Choice)
-             </h5>
-          </div>
-          <div className="space-y-2">
-            <div className="flex gap-1 items-center bg-blue-50/30 p-1.5 rounded-lg border border-blue-100/50">
-               <input 
-                 type="text" 
-                 placeholder="abbr (pr qe)" 
-                 value={newAbbr.find} 
-                 onChange={e => setNewAbbr(p => ({ ...p, find: e.target.value }))}
-                 className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-white border border-blue-100 focus:outline-none"
-               />
-               <span className="text-blue-300 text-[10px]">→</span>
-               <input 
-                 type="text" 
-                 placeholder="expan (porque)" 
-                 value={newAbbr.replace} 
-                 onChange={e => setNewAbbr(p => ({ ...p, replace: e.target.value }))}
-                 className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-white border border-blue-100 focus:outline-none"
-               />
-               <button onClick={addAbbreviation} className="bg-blue-600 text-white w-5 h-5 rounded flex items-center justify-center text-[9px] hover:bg-blue-500"><i className="fa-solid fa-plus"></i></button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {entry.abbreviations?.map(abbr => (
-                <div key={abbr.id} className="group flex items-center gap-1.5 bg-white border border-blue-100 px-2 py-1 rounded-full text-[9px] font-bold shadow-sm">
-                   <span className="text-blue-600">{abbr.find}</span>
-                   <span className="text-slate-300">→</span>
-                   <span className="text-slate-600">{abbr.replace}</span>
-                   <button onClick={() => removeAbbreviation(abbr.id)} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-xmark"></i></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
+      <div className="px-5 pb-4 border-t border-slate-50 pt-3 flex flex-col gap-6">
         <div>
           <div className="flex justify-between items-center mb-2">
              <h5 className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -254,12 +201,26 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
           <div className="space-y-2">
             {entry.notes.map(note => (
               <div key={note.id} className="flex gap-2 items-start bg-slate-50/50 p-2 rounded-lg border border-slate-100 group">
-                <select value={note.type} onChange={e => updateNote(note.id, { type: e.target.value })} className="text-[9px] font-bold bg-white border border-slate-200 px-1 py-0.5 rounded outline-none w-24">
-                  {NOTE_TYPES.map(t => <option key={t.id} value={t.id}>{t.id.toUpperCase()}</option>)}
+                <select 
+                  value={note.type} 
+                  onChange={e => {
+                    if (e.target.value === 'none') {
+                      removeNote(note.id);
+                    } else {
+                      updateNote(note.id, { type: e.target.value });
+                    }
+                  }} 
+                  className="text-[9px] font-bold bg-white border border-slate-200 px-1 py-1 rounded outline-none w-36 shadow-sm focus:border-blue-400"
+                >
+                  {NOTE_TYPES.map(t => (
+                    <option key={t.id} value={t.id} className={t.id === 'none' ? 'text-red-500' : ''}>
+                      {t.desc}
+                    </option>
+                  ))}
                 </select>
-                <input type="text" value={note.resp} onChange={e => updateNote(note.id, { resp: e.target.value })} className="w-8 text-[9px] font-bold text-center border-b border-slate-200 outline-none" placeholder="Resp" />
-                <textarea value={note.text} onChange={e => updateNote(note.id, { text: e.target.value })} className="flex-1 text-[10px] bg-white border border-slate-200 rounded px-2 py-0.5 outline-none resize-none h-6" />
-                <button onClick={() => removeNote(note.id)} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-xmark"></i></button>
+                <input type="text" value={note.resp} onChange={e => updateNote(note.id, { resp: e.target.value })} className="w-10 text-[9px] font-bold text-center border-b border-slate-200 outline-none h-6" placeholder="Resp" />
+                <textarea value={note.text} onChange={e => updateNote(note.id, { text: e.target.value })} className="flex-1 text-[10px] bg-white border border-slate-200 rounded px-2 py-1 outline-none resize-none h-6" placeholder="Enter observation..." />
+                <button onClick={() => removeNote(note.id)} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity self-center"><i className="fa-solid fa-xmark"></i></button>
               </div>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, AbbreviationPair } from './types';
+import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES } from './types';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
@@ -52,7 +52,6 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
     eng_gloss: '',
     uncertain_eng: false,
     notes: [],
-    abbreviations: []
   };
 };
 
@@ -112,44 +111,30 @@ const App: React.FC = () => {
     const { metadata, entries } = state;
     const cert = (u: boolean) => u ? ' certain="no"' : '';
 
-    const wrapChoice = (text: string, abbreviations: AbbreviationPair[]) => {
-      if (!text || abbreviations.length === 0) return text;
-      let processed = text;
-      const sorted = [...abbreviations].sort((a, b) => b.find.length - a.find.length);
-      sorted.forEach(abbr => {
-        if (!abbr.find || !abbr.replace) return;
-        const escaped = abbr.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escaped}\\b`, 'g');
-        processed = processed.replace(regex, `<choice><abbr>${abbr.find}</abbr><expan>${abbr.replace}</expan></choice>`);
-      });
-      return processed;
-    };
-
     const renderEntry = (e: TranscriptionEntry) => {
       const entryIdx = entries.indexOf(e) + 1;
       const eid = `p1e${entryIdx.toString().padStart(3, '0')}`;
       let xml = `          <entry xml:id="${eid}">\n`;
       xml += `            <form type="lemma">\n`;
-      xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${wrapChoice(e.old_maz, e.abbreviations)}</orth>\n`;
+      xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${e.old_maz}</orth>\n`;
       xml += `              <orth type="norm" xml:lang="maz">${e.new_maz}</orth>\n`;
       xml += `            </form>\n`;
 
       if (e.variant) {
         xml += `            <form type="variant">\n`;
-        xml += `              <usg type="textual" xml:lang="lat"><choice><abbr>${e.variant.usg}</abbr><expan>vel</expan></choice></usg>\n`;
-        xml += `              <orth type="orig" xml:lang="maz">${wrapChoice(e.variant.orig, e.abbreviations)}</orth>\n`;
+        xml += `              <usg type="textual" xml:lang="lat">${e.variant.usg}</usg>\n`;
+        xml += `              <orth type="orig" xml:lang="maz">${e.variant.orig}</orth>\n`;
         xml += `              <orth type="norm" xml:lang="maz">${e.variant.norm}</orth>\n`;
         xml += `            </form>\n`;
       }
 
       xml += `            <sense>\n`;
-      xml += `              <def type="orig" xml:lang="spa"${cert(e.uncertain_spa)}>${wrapChoice(e.old_spa, e.abbreviations)}</def>\n`;
+      xml += `              <def type="orig" xml:lang="spa"${cert(e.uncertain_spa)}>${e.old_spa}</def>\n`;
       xml += `              <def type="norm" xml:lang="spa">${e.new_spa}</def>\n`;
       xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${e.eng_gloss}</def>\n`;
       xml += `            </sense>\n`;
       
       e.notes.forEach(n => {
-        // Omit type="none" for standard TEI compliance
         const typeAttr = n.type && n.type !== 'none' ? ` type="${n.type}"` : '';
         xml += `            <note${typeAttr} resp="#${n.resp}">${n.text}</note>\n`;
       });
@@ -228,57 +213,114 @@ ${renderColumn('col2', '2')}
 </TEI>`;
   }, [state]);
 
+  const parseEntryContent = (content: string, layout: 'col1' | 'col2' | 'across'): TranscriptionEntry => {
+    const old_maz = content.match(/<orth type="orig" xml:lang="maz"[^>]*?>(.*?)<\/orth>/i)?.[1] || '';
+    const new_maz = content.match(/<orth type="norm" xml:lang="maz"[^>]*?>(.*?)<\/orth>/i)?.[1] || '';
+    const unc_maz = /<orth type="orig"[^>]*?certain="no"/i.test(content);
+    
+    let variant: any = undefined;
+    const variantMatch = content.match(/<form type="variant">[\s\S]*?<usg[^>]*?>(.*?)<\/usg>[\s\S]*?<orth type="orig"[^>]*?>(.*?)<\/orth>[\s\S]*?<orth type="norm"[^>]*?>(.*?)<\/orth>/i);
+    if (variantMatch) {
+      variant = { id: crypto.randomUUID(), usg: variantMatch[1], orig: variantMatch[2], norm: variantMatch[3] };
+    } else {
+      const legacyVariantMatch = content.match(/<form type="variant">[\s\S]*?<abbr[^>]*?>(.*?)<\/abbr>[\s\S]*?<orth type="orig"[^>]*?>(.*?)<\/orth>[\s\S]*?<orth type="norm"[^>]*?>(.*?)<\/orth>/i);
+      if (legacyVariantMatch) {
+         variant = { id: crypto.randomUUID(), usg: legacyVariantMatch[1], orig: legacyVariantMatch[2], norm: legacyVariantMatch[3] };
+      }
+    }
+
+    const old_spa = content.match(/<def type="orig" xml:lang="spa"[^>]*?>(.*?)<\/def>/i)?.[1] || '';
+    const new_spa = content.match(/<def type="norm" xml:lang="spa"[^>]*?>(.*?)<\/def>/i)?.[1] || '';
+    const unc_spa = /<def type="orig"[^>]*?certain="no"/i.test(content);
+    const eng_gloss = content.match(/<def type="gloss" xml:lang="eng"[^>]*?>(.*?)<\/def>/i)?.[1] || '';
+    const unc_eng = /<def type="gloss"[^>]*?certain="no"/i.test(content);
+    const line = content.match(/<lb n="(.*?)"/i)?.[1] || '';
+    
+    const notes: any[] = [];
+    const noteRegex = /<note(.*?) resp="#(.*?)">(.*?)<\/note>/gi;
+    let nMatch;
+    while ((nMatch = noteRegex.exec(content)) !== null) {
+      const typeMatch = nMatch[1].match(/type="(.*?)"/i);
+      notes.push({ 
+        id: crypto.randomUUID(), 
+        type: typeMatch ? typeMatch[1] : 'editorial', 
+        resp: nMatch[2], 
+        text: nMatch[3] 
+      });
+    }
+    
+    return { 
+      id: crypto.randomUUID(), 
+      layout, 
+      line, 
+      old_maz, 
+      new_maz, 
+      uncertain_maz: unc_maz, 
+      old_spa, 
+      new_spa, 
+      uncertain_spa: unc_spa, 
+      eng_gloss, 
+      uncertain_eng: unc_eng, 
+      variant, 
+      notes
+    };
+  };
+
   const processFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const xml = e.target?.result as string;
       try {
         const metadata: Metadata = {
-          title_orig: xml.match(/<titleStmt>[\s\S]*?<title>(.*?)<\/title>/)?.[1] || INITIAL_METADATA.title_orig,
-          title_norm: xml.match(/<title type="norm".*?>(.*?)<\/title>/)?.[1] || INITIAL_METADATA.title_norm,
-          title_gloss: xml.match(/<title type="gloss".*?>(.*?)<\/title>/)?.[1] || INITIAL_METADATA.title_gloss,
-          title_note: xml.match(/<msItem>[\s\S]*?<note>(.*?)<\/note>/)?.[1] || INITIAL_METADATA.title_note,
-          author: xml.match(/<author><persName>(.*?)<\/persName>/)?.[1] || INITIAL_METADATA.author,
-          editor: xml.match(/<editor>[\s\S]*?<persName>(.*?)<\/persName>/)?.[1] || INITIAL_METADATA.editor,
-          affiliation: xml.match(/<affiliation>(.*?)<\/affiliation>/)?.[1] || INITIAL_METADATA.affiliation,
-          pub_date: xml.match(/<date when="(.*?)">/)?.[1] || INITIAL_METADATA.pub_date,
-          settlement: xml.match(/<settlement>(.*?)<\/settlement>/)?.[1] || INITIAL_METADATA.settlement,
-          institution: xml.match(/<institution>(.*?)<\/institution>/)?.[1] || INITIAL_METADATA.institution,
-          repository: xml.match(/<repository>(.*?)<\/repository>/)?.[1] || INITIAL_METADATA.repository,
-          shelfmark: xml.match(/<idno type="shelfmark">(.*?)<\/idno>/)?.[1] || INITIAL_METADATA.shelfmark,
-          collection: xml.match(/<altIdentifier type="collection"><idno>(.*?)<\/idno>/)?.[1] || INITIAL_METADATA.collection,
-          summary: xml.match(/<summary>(.*?)<\/summary>/)?.[1] || INITIAL_METADATA.summary,
-          orig_date: xml.match(/<origDate.*?>(.*?)<\/origDate>/)?.[1].replace('begun ', '') || INITIAL_METADATA.orig_date,
-          orig_place: xml.match(/<origPlace>(.*?)<\/origPlace>/)?.[1] || INITIAL_METADATA.orig_place,
-          pb_n: xml.match(/<pb n="(.*?)"/)?.[1] || INITIAL_METADATA.pb_n,
-          image_source: xml.match(/facs="(.*?)"/)?.[1] || INITIAL_METADATA.image_source,
-          phys_extent: xml.match(/<extent>(.*?)<\/extent>/)?.[1] || INITIAL_METADATA.phys_extent,
-          phys_layout: xml.match(/<layout.*?> (.*?)<\/layout>/)?.[1] || INITIAL_METADATA.phys_layout,
-          hand_note: xml.match(/<handNote>(.*?)<\/handNote>/)?.[1] || INITIAL_METADATA.hand_note,
-          project_desc: xml.match(/<projectDesc><p>(.*?)<\/p>/)?.[1] || INITIAL_METADATA.project_desc,
+          title_orig: xml.match(/<titleStmt>[\s\S]*?<title>(.*?)<\/title>/i)?.[1] || INITIAL_METADATA.title_orig,
+          title_norm: xml.match(/<title type="norm".*?>(.*?)<\/title>/i)?.[1] || INITIAL_METADATA.title_norm,
+          title_gloss: xml.match(/<title type="gloss".*?>(.*?)<\/title>/i)?.[1] || INITIAL_METADATA.title_gloss,
+          title_note: xml.match(/<msItem>[\s\S]*?<note>(.*?)<\/note>/i)?.[1] || INITIAL_METADATA.title_note,
+          author: xml.match(/<author><persName>(.*?)<\/persName>/i)?.[1] || INITIAL_METADATA.author,
+          editor: xml.match(/<editor>[\s\S]*?<persName>(.*?)<\/persName>/i)?.[1] || INITIAL_METADATA.editor,
+          affiliation: xml.match(/<affiliation>(.*?)<\/affiliation>/i)?.[1] || INITIAL_METADATA.affiliation,
+          pub_date: xml.match(/<date when="(.*?)">/i)?.[1] || INITIAL_METADATA.pub_date,
+          settlement: xml.match(/<settlement>(.*?)<\/settlement>/i)?.[1] || INITIAL_METADATA.settlement,
+          institution: xml.match(/<institution>(.*?)<\/institution>/i)?.[1] || INITIAL_METADATA.institution,
+          repository: xml.match(/<repository>(.*?)<\/repository>/i)?.[1] || INITIAL_METADATA.repository,
+          shelfmark: xml.match(/<idno type="shelfmark">(.*?)<\/idno>/i)?.[1] || INITIAL_METADATA.shelfmark,
+          collection: xml.match(/<altIdentifier type="collection"><idno>(.*?)<\/idno>/i)?.[1] || INITIAL_METADATA.collection,
+          summary: xml.match(/<summary>(.*?)<\/summary>/i)?.[1] || INITIAL_METADATA.summary,
+          orig_date: xml.match(/<origDate.*?>(.*?)<\/origDate>/i)?.[1]?.replace('begun ', '') || INITIAL_METADATA.orig_date,
+          orig_place: xml.match(/<origPlace>(.*?)<\/origPlace>/i)?.[1] || INITIAL_METADATA.orig_place,
+          pb_n: xml.match(/<pb n="(.*?)"/i)?.[1] || INITIAL_METADATA.pb_n,
+          image_source: xml.match(/facs="(.*?)"/i)?.[1] || INITIAL_METADATA.image_source,
+          phys_extent: xml.match(/<extent>(.*?)<\/extent>/i)?.[1] || INITIAL_METADATA.phys_extent,
+          phys_layout: xml.match(/<layout.*?> (.*?)<\/layout>/i)?.[1] || INITIAL_METADATA.phys_layout,
+          hand_note: xml.match(/<handNote>(.*?)<\/handNote>/i)?.[1] || INITIAL_METADATA.hand_note,
+          project_desc: xml.match(/<projectDesc><p>(.*?)<\/p>/i)?.[1] || INITIAL_METADATA.project_desc,
         };
 
         const entries: TranscriptionEntry[] = [];
-        const entryRegex = /<entry xml:id=".*?">([\s\S]*?)<\/entry>/gs;
-        const vocabularyBody = xml.split('<div type="vocabulary">')[1]?.split('</body>')[0] || '';
-        const acrossContent = vocabularyBody.split(/<div type="column"/)[0];
+        const entryRegex = /<entry xml:id=".*?">([\s\S]*?)<\/entry>/gis;
+        const vocabularyBody = xml.split(/<div type="vocabulary">/i)[1]?.split(/<\/body>/i)[0] || '';
+        const acrossContent = vocabularyBody.split(/<div type="column"/i)[0];
+        
         let acrossMatch;
+        entryRegex.lastIndex = 0;
         while ((acrossMatch = entryRegex.exec(acrossContent)) !== null) {
           entries.push(parseEntryContent(acrossMatch[1], 'across'));
         }
-        const colRegex = /<div type="column" n="(1|2)">([\s\S]*?)<\/div>/gs;
+        
+        const colRegex = /<div type="column" n="(1|2)">([\s\S]*?)<\/div>/gis;
         let colMatch;
         while ((colMatch = colRegex.exec(xml)) !== null) {
           const colLayout = colMatch[1] === '1' ? 'col1' : 'col2';
           const colContent = colMatch[2];
           let eMatch;
+          entryRegex.lastIndex = 0; 
           while ((eMatch = entryRegex.exec(colContent)) !== null) {
             entries.push(parseEntryContent(eMatch[1], colLayout));
           }
         }
         setState({ metadata, entries: entries.length ? entries : [createNewEntry()] });
         setImportSuccess(true);
-      } catch (err) { alert("Import failed."); }
+      } catch (err) { console.error(err); alert("Import failed."); }
     };
     reader.readAsText(file);
   };
@@ -293,65 +335,6 @@ ${renderColumn('col2', '2')}
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
     if (file && file.name.endsWith('.xml')) processFile(file);
-  };
-
-  const parseEntryContent = (content: string, layout: 'col1' | 'col2' | 'across'): TranscriptionEntry => {
-    const abbreviations: AbbreviationPair[] = [];
-    const choiceRegex = /<choice><abbr>(.*?)<\/abbr><expan>(.*?)<\/expan><\/choice>/g;
-    let cMatch;
-    while ((cMatch = choiceRegex.exec(content)) !== null) {
-      if (!abbreviations.find(a => a.find === cMatch[1])) {
-        abbreviations.push({ id: crypto.randomUUID(), find: cMatch[1], replace: cMatch[2] });
-      }
-    }
-
-    const cleanText = (text: string) => {
-      return text.replace(/<choice><abbr>(.*?)<\/abbr><expan>.*?<\/expan><\/choice>/g, '$1');
-    };
-
-    const old_maz_raw = content.match(/<orth type="orig" xml:lang="maz".*?>(.*?)<\/orth>/)?.[1] || '';
-    const new_maz = content.match(/<orth type="norm" xml:lang="maz".*?>(.*?)<\/orth>/)?.[1] || '';
-    const unc_maz = /<orth type="orig"[^>]*?certain="no"/.test(content);
-    let variant: any = undefined;
-    const variantMatch = content.match(/<form type="variant">[\s\S]*?<abbr>(.*?)<\/abbr>[\s\S]*?<orth type="orig".*?>(.*?)<\/orth>[\s\S]*?<orth type="norm".*?>(.*?)<\/orth>/);
-    if (variantMatch) {
-      variant = { id: crypto.randomUUID(), usg: variantMatch[1], orig: cleanText(variantMatch[2]), norm: variantMatch[3] };
-    }
-    const old_spa_raw = content.match(/<def type="orig" xml:lang="spa".*?>(.*?)<\/def>/)?.[1] || '';
-    const new_spa = content.match(/<def type="norm" xml:lang="spa".*?>(.*?)<\/def>/)?.[1] || '';
-    const unc_spa = /<def type="orig"[^>]*?certain="no"/.test(content);
-    const eng_gloss = content.match(/<def type="gloss" xml:lang="eng".*?>(.*?)<\/def>/)?.[1] || '';
-    const unc_eng = /<def type="gloss"[^>]*?certain="no"/.test(content);
-    const line = content.match(/<lb n="(.*?)"/)?.[1] || '';
-    const notes: any[] = [];
-    const noteRegex = /<note(.*?) resp="#(.*?)">(.*?)<\/note>/g;
-    let nMatch;
-    while ((nMatch = noteRegex.exec(content)) !== null) {
-      const typeMatch = nMatch[1].match(/type="(.*?)"/);
-      notes.push({ 
-        id: crypto.randomUUID(), 
-        type: typeMatch ? typeMatch[1] : 'none', 
-        resp: nMatch[2], 
-        text: nMatch[3] 
-      });
-    }
-    
-    return { 
-      id: crypto.randomUUID(), 
-      layout, 
-      line, 
-      old_maz: cleanText(old_maz_raw), 
-      new_maz, 
-      uncertain_maz: unc_maz, 
-      old_spa: cleanText(old_spa_raw), 
-      new_spa, 
-      uncertain_spa: unc_spa, 
-      eng_gloss, 
-      uncertain_eng: unc_eng, 
-      variant, 
-      notes, 
-      abbreviations 
-    };
   };
 
   return (

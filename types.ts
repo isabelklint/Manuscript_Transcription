@@ -5,12 +5,6 @@ export interface NoteEntry {
   text: string;
 }
 
-export interface AbbreviationPair {
-  id: string;
-  find: string;
-  replace: string;
-}
-
 export interface VariantEntry {
   id: string;
   usg: string; // e.g. v.l.
@@ -34,7 +28,6 @@ export interface TranscriptionEntry {
   kirk_set?: string;
   variant?: VariantEntry;
   notes: NoteEntry[];
-  abbreviations: AbbreviationPair[]; // New: managed list of contractions/abbreviations
 }
 
 export interface Metadata {
@@ -68,11 +61,11 @@ export interface TranscriptionState {
 }
 
 export const NOTE_TYPES = [
-  { id: 'none', desc: 'General or uncategorized observation' },
-  { id: 'editorial', desc: 'Transcription decisions and uncertainties' },
-  { id: 'linguistic', desc: 'Comparative and reconstructed forms' },
-  { id: 'layout', desc: 'Physical arrangement on manuscript page' },
-  { id: 'orthographic', desc: 'Spelling conventions and grapheme interpretation' },
-  { id: 'historical', desc: 'Context about period, author, colonial usage' },
-  { id: 'semantic', desc: 'Meaning clarifications' },
+  { id: 'editorial', desc: 'Editorial' },
+  { id: 'linguistic', desc: 'Linguistic' },
+  { id: 'layout', desc: 'Layout' },
+  { id: 'orthographic', desc: 'Orthographic' },
+  { id: 'historical', desc: 'Historical' },
+  { id: 'semantic', desc: 'Semantic' },
+  { id: 'none', desc: 'None (Remove Note)' },
 ];
