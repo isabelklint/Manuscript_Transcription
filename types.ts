@@ -5,6 +5,12 @@ export interface NoteEntry {
   text: string;
 }
 
+export interface AbbreviationPair {
+  id: string;
+  find: string;
+  replace: string;
+}
+
 export interface VariantEntry {
   id: string;
   usg: string; // e.g. v.l.
@@ -28,13 +34,14 @@ export interface TranscriptionEntry {
   kirk_set?: string;
   variant?: VariantEntry;
   notes: NoteEntry[];
+  abbreviations: AbbreviationPair[]; // New: managed list of contractions/abbreviations
 }
 
 export interface Metadata {
   title_orig: string;
   title_norm: string;
   title_gloss: string;
-  title_note: string; // New: e.g. comencado en el año...
+  title_note: string;
   author: string;
   editor: string;
   affiliation: string;
@@ -48,10 +55,11 @@ export interface Metadata {
   orig_date: string;
   orig_place: string;
   pb_n: string;
-  phys_extent: string; // New
-  phys_layout: string; // New
-  hand_note: string;   // New
-  project_desc: string; // New
+  image_source: string;
+  phys_extent: string;
+  phys_layout: string;
+  hand_note: string;
+  project_desc: string;
 }
 
 export interface TranscriptionState {
@@ -60,6 +68,7 @@ export interface TranscriptionState {
 }
 
 export const NOTE_TYPES = [
+  { id: 'none', desc: 'General or uncategorized observation' },
   { id: 'editorial', desc: 'Transcription decisions and uncertainties' },
   { id: 'linguistic', desc: 'Comparative and reconstructed forms' },
   { id: 'layout', desc: 'Physical arrangement on manuscript page' },
