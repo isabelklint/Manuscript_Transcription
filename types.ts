@@ -34,6 +34,7 @@ export interface Metadata {
   title_orig: string;
   title_norm: string;
   title_gloss: string;
+  title_note: string; // New: e.g. comencado en el año...
   author: string;
   editor: string;
   affiliation: string;
@@ -47,6 +48,10 @@ export interface Metadata {
   orig_date: string;
   orig_place: string;
   pb_n: string;
+  phys_extent: string; // New
+  phys_layout: string; // New
+  hand_note: string;   // New
+  project_desc: string; // New
 }
 
 export interface TranscriptionState {
