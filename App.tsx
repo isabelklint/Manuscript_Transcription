@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES } from './types';
+import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
@@ -101,21 +102,12 @@ const App: React.FC = () => {
 
   const exportFileName = useMemo(() => {
     const sanitize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
-    // 1. Author (Last name)
     const authorParts = state.metadata.author.trim().split(/\s+/);
     const author = sanitize(authorParts[authorParts.length - 1] || 'unknown');
-    
-    // 2. Keyword (Priority to dedicated field)
     const keyword = sanitize(state.metadata.filename_keyword || state.metadata.title_orig.split(/\s+/)[0] || 'keyword');
-    
-    // 3. Date (Year)
     const yearMatch = state.metadata.orig_date.match(/\d{4}/);
     const date = yearMatch ? yearMatch[0] : 'date';
-    
-    // 4. Page
     const page = `p${state.metadata.pb_n || '0'}`;
-    
     return `${author}_${keyword}_${date}_${page}.xml`;
   }, [state.metadata]);
 
@@ -130,6 +122,7 @@ const App: React.FC = () => {
       xml += `            <form type="lemma">\n`;
       xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${e.old_maz}</orth>\n`;
       xml += `              <orth type="norm" xml:lang="maz">${e.new_maz}</orth>\n`;
+      if (e.ipa) xml += `              <pron notation="ipa">${e.ipa}</pron>\n`;
       xml += `            </form>\n`;
 
       if (e.variant) {
@@ -146,6 +139,18 @@ const App: React.FC = () => {
       xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${e.eng_gloss}</def>\n`;
       xml += `            </sense>\n`;
       
+      if (e.kirk_set) {
+        xml += `            <note type="kirk" n="${e.kirk_set.number}" target="${e.kirk_set.page}">\n`;
+        xml += `              <hi type="proto">${e.kirk_set.protoForm}</hi>\n`;
+        xml += `              <list type="daughters">\n`;
+        e.kirk_set.daughters.forEach(d => {
+          const matchAttr = d.matches ? ' cert="high"' : ' cert="low"';
+          xml += `                <item${matchAttr}>${d.text}</item>\n`;
+        });
+        xml += `              </list>\n`;
+        xml += `            </note>\n`;
+      }
+
       e.notes.forEach(n => {
         const typeAttr = n.type && n.type !== 'none' ? ` type="${n.type}"` : '';
         xml += `            <note${typeAttr} resp="#${n.resp}">${n.text}</note>\n`;
@@ -228,17 +233,13 @@ ${renderColumn('col2', '2')}
   const parseEntryContent = (content: string, layout: 'col1' | 'col2' | 'across'): TranscriptionEntry => {
     const old_maz = content.match(/<orth type="orig" xml:lang="maz"[^>]*?>(.*?)<\/orth>/i)?.[1] || '';
     const new_maz = content.match(/<orth type="norm" xml:lang="maz"[^>]*?>(.*?)<\/orth>/i)?.[1] || '';
+    const ipa = content.match(/<pron notation="ipa">(.*?)<\/pron>/i)?.[1] || '';
     const unc_maz = /<orth type="orig"[^>]*?certain="no"/i.test(content);
     
     let variant: any = undefined;
     const variantMatch = content.match(/<form type="variant">[\s\S]*?<usg[^>]*?>(.*?)<\/usg>[\s\S]*?<orth type="orig"[^>]*?>(.*?)<\/orth>[\s\S]*?<orth type="norm"[^>]*?>(.*?)<\/orth>/i);
     if (variantMatch) {
       variant = { id: crypto.randomUUID(), usg: variantMatch[1], orig: variantMatch[2], norm: variantMatch[3] };
-    } else {
-      const legacyVariantMatch = content.match(/<form type="variant">[\s\S]*?<abbr[^>]*?>(.*?)<\/abbr>[\s\S]*?<orth type="orig"[^>]*?>(.*?)<\/orth>[\s\S]*?<orth type="norm"[^>]*?>(.*?)<\/orth>/i);
-      if (legacyVariantMatch) {
-         variant = { id: crypto.randomUUID(), usg: legacyVariantMatch[1], orig: legacyVariantMatch[2], norm: legacyVariantMatch[3] };
-      }
     }
 
     const old_spa = content.match(/<def type="orig" xml:lang="spa"[^>]*?>(.*?)<\/def>/i)?.[1] || '';
@@ -248,11 +249,31 @@ ${renderColumn('col2', '2')}
     const unc_eng = /<def type="gloss"[^>]*?certain="no"/i.test(content);
     const line = content.match(/<lb n="(.*?)"/i)?.[1] || '';
     
+    let kirk_set: KirkSet | undefined = undefined;
+    const kirkMatch = content.match(/<note type="kirk" n="(.*?)" target="(.*?)">([\s\S]*?)<\/note>/i);
+    if (kirkMatch) {
+      const kirkContent = kirkMatch[3];
+      const protoForm = kirkContent.match(/<hi type="proto">(.*?)<\/hi>/i)?.[1] || '';
+      const daughters: DaughterWord[] = [];
+      // Fix: Correct the regex literal for item tags by adding missing leading slash
+      const itemRegex = /<item(.*?)>(.*?)<\/item>/gi;
+      let iMatch;
+      while ((iMatch = itemRegex.exec(kirkContent)) !== null) {
+        daughters.push({
+          id: crypto.randomUUID(),
+          text: iMatch[2],
+          matches: iMatch[1].includes('cert="high"')
+        });
+      }
+      kirk_set = { number: kirkMatch[1], page: kirkMatch[2], protoForm, daughters };
+    }
+
     const notes: any[] = [];
     const noteRegex = /<note(.*?) resp="#(.*?)">(.*?)<\/note>/gi;
     let nMatch;
     while ((nMatch = noteRegex.exec(content)) !== null) {
       const typeMatch = nMatch[1].match(/type="(.*?)"/i);
+      if (typeMatch?.[1] === 'kirk') continue; // Handled separately
       notes.push({ 
         id: crypto.randomUUID(), 
         type: typeMatch ? typeMatch[1] : 'editorial', 
@@ -267,6 +288,7 @@ ${renderColumn('col2', '2')}
       line, 
       old_maz, 
       new_maz, 
+      ipa,
       uncertain_maz: unc_maz, 
       old_spa, 
       new_spa, 
@@ -274,6 +296,7 @@ ${renderColumn('col2', '2')}
       eng_gloss, 
       uncertain_eng: unc_eng, 
       variant, 
+      kirk_set,
       notes
     };
   };

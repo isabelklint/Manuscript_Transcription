@@ -12,6 +12,19 @@ export interface VariantEntry {
   norm: string;
 }
 
+export interface DaughterWord {
+  id: string;
+  text: string;
+  matches: boolean;
+}
+
+export interface KirkSet {
+  number: string;
+  protoForm: string;
+  page: string;
+  daughters: DaughterWord[];
+}
+
 export interface TranscriptionEntry {
   id: string;
   layout: 'col1' | 'col2' | 'across';
@@ -25,7 +38,7 @@ export interface TranscriptionEntry {
   eng_gloss: string;
   uncertain_eng: boolean;
   ipa?: string;
-  kirk_set?: string;
+  kirk_set?: KirkSet;
   variant?: VariantEntry;
   notes: NoteEntry[];
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { TranscriptionEntry, NoteEntry, NOTE_TYPES } from '../types';
+import { TranscriptionEntry, NoteEntry, NOTE_TYPES, KirkSet, DaughterWord } from '../types';
 
 interface Props {
   entry: TranscriptionEntry;
@@ -27,16 +27,33 @@ const UncertainBox = ({ label, active, onChange }: { label: string, active: bool
 );
 
 const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplicate }) => {
-  // Default new notes to 'editorial' type
   const addNote = () => onUpdate({ notes: [...entry.notes, { id: crypto.randomUUID(), type: 'editorial', resp: 'IK', text: '' }] });
   const updateNote = (id: string, u: Partial<NoteEntry>) => onUpdate({ notes: entry.notes.map(n => n.id === id ? { ...n, ...u } : n) });
   const removeNote = (id: string) => onUpdate({ notes: entry.notes.filter(n => n.id !== id) });
 
   const toggleVariant = () => {
-    if (entry.variant) {
-      onUpdate({ variant: undefined });
-    } else {
-      onUpdate({ variant: { id: crypto.randomUUID(), usg: 'v.l.', orig: '', norm: '' } });
+    onUpdate({ variant: entry.variant ? undefined : { id: crypto.randomUUID(), usg: 'v.l.', orig: '', norm: '' } });
+  };
+
+  const toggleKirk = () => {
+    onUpdate({ 
+      kirk_set: entry.kirk_set ? undefined : { number: '', protoForm: '', page: '', daughters: [] } 
+    });
+  };
+
+  const updateKirk = (u: Partial<KirkSet>) => {
+    if (entry.kirk_set) onUpdate({ kirk_set: { ...entry.kirk_set, ...u } });
+  };
+
+  const addDaughter = () => {
+    if (entry.kirk_set) {
+      updateKirk({ daughters: [...entry.kirk_set.daughters, { id: crypto.randomUUID(), text: '', matches: false }] });
+    }
+  };
+
+  const updateDaughter = (id: string, u: Partial<DaughterWord>) => {
+    if (entry.kirk_set) {
+      updateKirk({ daughters: entry.kirk_set.daughters.map(d => d.id === id ? { ...d, ...u } : d) });
     }
   };
 
@@ -67,8 +84,8 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
           </div>
         </div>
         <div className="flex gap-2 text-xs">
-           <button onClick={onDuplicate} className="text-slate-300 hover:text-blue-500 p-1"><i className="fa-solid fa-clone"></i></button>
-           <button onClick={onRemove} className="text-slate-300 hover:text-red-500 p-1"><i className="fa-solid fa-trash"></i></button>
+           <button onClick={onDuplicate} title="Duplicate Entry" className="text-slate-300 hover:text-blue-500 p-1"><i className="fa-solid fa-clone"></i></button>
+           <button onClick={onRemove} title="Delete Entry" className="text-slate-300 hover:text-red-500 p-1"><i className="fa-solid fa-trash"></i></button>
         </div>
       </div>
 
@@ -175,15 +192,88 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
                   className="w-full px-3 py-1.5 border border-slate-100 bg-purple-50/10 rounded text-sm outline-none focus:border-purple-300"
                 />
              </div>
-             <div className="grid grid-cols-2 gap-2 pt-2">
-                <div className="space-y-1">
-                   <label className="text-[8px] font-bold text-slate-400 uppercase">IPA</label>
-                   <input type="text" value={entry.ipa || ''} onChange={e => onUpdate({ ipa: e.target.value })} className="w-full text-xs px-2 py-1 border border-slate-100 rounded font-mono focus:outline-none" />
-                </div>
-                <div className="space-y-1">
-                   <label className="text-[8px] font-bold text-slate-400 uppercase">Kirk Set</label>
-                   <input type="text" value={entry.kirk_set || ''} onChange={e => onUpdate({ kirk_set: e.target.value })} className="w-full text-xs px-2 py-1 border border-slate-100 rounded focus:outline-none" />
-                </div>
+             
+             <div className="space-y-1">
+                <label className="text-[8px] font-bold text-slate-400 uppercase">IPA Transcription</label>
+                <input 
+                  type="text" 
+                  value={entry.ipa || ''} 
+                  onChange={e => onUpdate({ ipa: e.target.value })} 
+                  className="w-full text-xs px-2 py-1.5 border border-slate-100 rounded font-mono focus:outline-none focus:border-purple-300" 
+                  placeholder="/.../"
+                />
+             </div>
+
+             <div className="pt-2">
+                <button 
+                  onClick={toggleKirk}
+                  className={`w-full text-[9px] font-black uppercase px-2 py-2 rounded border transition-colors ${entry.kirk_set ? 'bg-purple-600 border-purple-700 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}
+                >
+                  {entry.kirk_set ? 'Kirk Comparative Set Active' : '+ Manage Kirk Set'}
+                </button>
+
+                {entry.kirk_set && (
+                  <div className="mt-3 p-3 bg-purple-50/50 border border-purple-200 rounded-lg space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-bold text-purple-600 uppercase">Set #</label>
+                        <input 
+                          type="text" 
+                          value={entry.kirk_set.number} 
+                          onChange={e => updateKirk({ number: e.target.value })}
+                          className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-bold text-purple-600 uppercase">Kirk Page</label>
+                        <input 
+                          type="text" 
+                          value={entry.kirk_set.page} 
+                          onChange={e => updateKirk({ page: e.target.value })}
+                          className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-purple-600 uppercase">Proto-Form (Headword)</label>
+                      <input 
+                        type="text" 
+                        value={entry.kirk_set.protoForm} 
+                        onChange={e => updateKirk({ protoForm: e.target.value })}
+                        className="w-full text-xs font-bold px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                        placeholder="*proto"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[8px] font-bold text-slate-500 uppercase">Daughter Forms</label>
+                        <button onClick={addDaughter} className="text-[8px] font-black text-purple-600 uppercase hover:underline">+ Add</button>
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {entry.kirk_set.daughters.map(d => (
+                          <div key={d.id} className="flex items-center gap-1.5 bg-white p-1 rounded border border-purple-100">
+                             <button 
+                               onClick={() => updateDaughter(d.id, { matches: !d.matches })}
+                               className={`w-4 h-4 rounded-sm flex items-center justify-center transition-colors ${d.matches ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'}`}
+                             >
+                               <i className="fa-solid fa-check text-[8px]"></i>
+                             </button>
+                             <input 
+                               type="text" 
+                               value={d.text} 
+                               onChange={e => updateDaughter(d.id, { text: e.target.value })}
+                               className="flex-1 text-[10px] outline-none"
+                             />
+                             <button onClick={() => updateKirk({ daughters: entry.kirk_set!.daughters.filter(x => x.id !== d.id) })} className="text-slate-200 hover:text-red-400">
+                               <i className="fa-solid fa-times text-[10px]"></i>
+                             </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
              </div>
           </div>
         </div>
