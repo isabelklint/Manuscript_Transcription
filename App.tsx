@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types';
-import MetadataForm from './components/MetadataForm';
-import EntryItem from './components/EntryItem';
-import XMLPreview from './components/XMLPreview';
+import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types.ts';
+import MetadataForm from './components/MetadataForm.tsx';
+import EntryItem from './components/EntryItem.tsx';
+import XMLPreview from './components/XMLPreview.tsx';
 
 const INITIAL_METADATA: Metadata = {
   title_orig: 'Vocabulario en Ydioma Mazateco',
@@ -255,7 +254,6 @@ ${renderColumn('col2', '2')}
       const kirkContent = kirkMatch[3];
       const protoForm = kirkContent.match(/<hi type="proto">(.*?)<\/hi>/i)?.[1] || '';
       const daughters: DaughterWord[] = [];
-      // Fix: Correct the regex literal for item tags by adding missing leading slash
       const itemRegex = /<item(.*?)>(.*?)<\/item>/gi;
       let iMatch;
       while ((iMatch = itemRegex.exec(kirkContent)) !== null) {
