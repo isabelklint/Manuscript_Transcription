@@ -53,6 +53,7 @@ export interface Metadata {
   phys_layout: string;
   hand_note: string;
   project_desc: string;
+  filename_keyword: string;
 }
 
 export interface TranscriptionState {

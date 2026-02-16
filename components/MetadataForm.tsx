@@ -56,6 +56,20 @@ const MetadataForm: React.FC<Props> = ({ metadata, onChange }) => {
         <Field label="Collection ID" field="collection" />
       </div>
 
+      {/* Export Settings (NEW) */}
+      <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100/50 grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="md:col-span-2">
+           <Field label="Filename Keyword" field="filename_keyword" placeholder="e.g. vocabulario" />
+           <p className="text-[8px] font-bold text-emerald-500 mt-1 uppercase italic">Controls the 'keyword' part of author_keyword_date_page.xml</p>
+        </div>
+        <div className="md:col-span-2 flex items-center pt-3">
+           <div className="bg-emerald-100/30 rounded px-2 py-1 border border-emerald-200/50">
+             <span className="text-[9px] font-black text-emerald-600 uppercase">Preview:</span>
+             <span className="text-[9px] font-mono text-emerald-700 ml-2 italic">..._{metadata.filename_keyword || 'keyword'}_...</span>
+           </div>
+        </div>
+      </div>
+
       {/* Physical Description Section */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <Field label="Physical Extent" field="phys_extent" />

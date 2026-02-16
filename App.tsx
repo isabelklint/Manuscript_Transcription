@@ -26,7 +26,8 @@ const INITIAL_METADATA: Metadata = {
   phys_extent: '18 pages, 4to',
   phys_layout: 'Double column',
   hand_note: 'Single hand, late 18th century',
-  project_desc: 'Transcription prepared for Lancaster University PGCERT in Corpus Linguistics.'
+  project_desc: 'Transcription prepared for Lancaster University PGCERT in Corpus Linguistics.',
+  filename_keyword: 'vocabulario'
 };
 
 const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
@@ -99,12 +100,23 @@ const App: React.FC = () => {
   };
 
   const exportFileName = useMemo(() => {
-    const author = state.metadata.author.split(' ').pop()?.toLowerCase() || 'unknown';
-    const keyword = state.metadata.title_orig.split(' ')[0].toLowerCase() || 'vocabulario';
-    const year = state.metadata.orig_date.match(/\d{4}/)?.[0] || 'date';
-    const imgMatch = state.metadata.image_source.match(/_(\d+)\./);
-    const pageSuffix = imgMatch ? `p${parseInt(imgMatch[1])}` : `p${state.metadata.pb_n}`;
-    return `${author}_${keyword}_${year}_${pageSuffix}.xml`;
+    const sanitize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // 1. Author (Last name)
+    const authorParts = state.metadata.author.trim().split(/\s+/);
+    const author = sanitize(authorParts[authorParts.length - 1] || 'unknown');
+    
+    // 2. Keyword (Priority to dedicated field)
+    const keyword = sanitize(state.metadata.filename_keyword || state.metadata.title_orig.split(/\s+/)[0] || 'keyword');
+    
+    // 3. Date (Year)
+    const yearMatch = state.metadata.orig_date.match(/\d{4}/);
+    const date = yearMatch ? yearMatch[0] : 'date';
+    
+    // 4. Page
+    const page = `p${state.metadata.pb_n || '0'}`;
+    
+    return `${author}_${keyword}_${date}_${page}.xml`;
   }, [state.metadata]);
 
   const generatedXML = useMemo(() => {
@@ -294,6 +306,7 @@ ${renderColumn('col2', '2')}
           phys_layout: xml.match(/<layout.*?> (.*?)<\/layout>/i)?.[1] || INITIAL_METADATA.phys_layout,
           hand_note: xml.match(/<handNote>(.*?)<\/handNote>/i)?.[1] || INITIAL_METADATA.hand_note,
           project_desc: xml.match(/<projectDesc><p>(.*?)<\/p>/i)?.[1] || INITIAL_METADATA.project_desc,
+          filename_keyword: INITIAL_METADATA.filename_keyword
         };
 
         const entries: TranscriptionEntry[] = [];
@@ -423,19 +436,19 @@ ${renderColumn('col2', '2')}
 
       <aside className="w-[520px] bg-[#1a1c23] flex flex-col shrink-0 border-l border-slate-800">
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#1a1c23]">
-           <div className="flex flex-col">
+           <div className="flex flex-col min-w-0">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
                 TEI P5 Real-time Preview
               </span>
-              <span className="text-[9px] font-bold text-blue-400/60 mt-0.5 font-mono">{exportFileName}</span>
+              <span className="text-[9px] font-bold text-blue-400/60 mt-0.5 font-mono truncate">{exportFileName}</span>
            </div>
            <div className="flex gap-2">
               <button onClick={() => {
                 const blob = new Blob([generatedXML], { type: 'text/xml' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href = url; a.download = exportFileName; a.click();
-              }} className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-500 shadow-xl shadow-blue-900/40 transition-transform active:scale-95">Download XML</button>
+              }} className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-500 shadow-xl shadow-blue-900/40 transition-transform active:scale-95 whitespace-nowrap">Download XML</button>
            </div>
         </div>
         <XMLPreview content={generatedXML} />
