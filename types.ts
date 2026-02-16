@@ -6,23 +6,24 @@ export interface NoteEntry {
 }
 
 export interface VariantEntry {
-  usg: string; // v.l.
+  id: string;
+  usg: string; // e.g. v.l.
   orig: string;
   norm: string;
 }
 
 export interface TranscriptionEntry {
   id: string;
-  column: '1' | '2';
+  layout: 'col1' | 'col2' | 'across';
   line: string;
   old_maz: string;
   new_maz: string;
-  uncertain_maz?: boolean;
+  uncertain_maz: boolean;
   old_spa: string;
   new_spa: string;
-  uncertain_spa?: boolean;
+  uncertain_spa: boolean;
   eng_gloss: string;
-  uncertain_eng?: boolean;
+  uncertain_eng: boolean;
   ipa?: string;
   kirk_set?: string;
   variant?: VariantEntry;
@@ -45,7 +46,7 @@ export interface Metadata {
   summary: string;
   orig_date: string;
   orig_place: string;
-  pb_n: string; // Page break ID
+  pb_n: string;
 }
 
 export interface TranscriptionState {

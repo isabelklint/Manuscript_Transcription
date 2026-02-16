@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, NoteEntry } from './types';
+import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES } from './types';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
 
 const INITIAL_METADATA: Metadata = {
   title_orig: 'Vocabulario en Ydioma Mazateco',
-  title_norm: 'Vocabulario en idioma mazateco',
-  title_gloss: 'Vocabulary in Mazatec Language',
+  title_norm: 'Cuaderno de idioma mazateco comenzado en el año de 1796',
+  title_gloss: 'Booklet of Mazatec language begun in the year 1796',
   author: 'Ygnacio Arrona',
   editor: 'Isabel Klint',
   affiliation: 'Lancaster University / ILV A.C.',
@@ -24,7 +24,7 @@ const INITIAL_METADATA: Metadata = {
 };
 
 const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
-  let nextLine = '1.1';
+  let nextLine = '1';
   if (lastEntry) {
     const parts = lastEntry.line.split('.');
     if (parts.length === 2) {
@@ -35,13 +35,16 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
   }
   return {
     id: crypto.randomUUID(),
-    column: lastEntry?.column || '1',
+    layout: lastEntry?.layout || 'col1',
     line: nextLine,
     old_maz: '',
     new_maz: '',
+    uncertain_maz: false,
     old_spa: '',
     new_spa: '',
+    uncertain_spa: false,
     eng_gloss: '',
+    uncertain_eng: false,
     notes: [],
   };
 };
@@ -49,13 +52,13 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
 const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('tei_transcriber_v1');
+    const saved = localStorage.getItem('tei_p5_v4_state');
     if (saved) return JSON.parse(saved);
     return { metadata: INITIAL_METADATA, entries: [createNewEntry()] };
   });
 
   useEffect(() => {
-    localStorage.setItem('tei_transcriber_v1', JSON.stringify(state));
+    localStorage.setItem('tei_p5_v4_state', JSON.stringify(state));
   }, [state]);
 
   const updateMetadata = (field: keyof Metadata, value: string) => {
@@ -81,47 +84,44 @@ const App: React.FC = () => {
 
   const generatedXML = useMemo(() => {
     const { metadata, entries } = state;
-    const certain = (flag?: boolean) => flag ? ' certain="no"' : '';
+    const cert = (u: boolean) => u ? ' certain="no"' : '';
 
-    const renderColumn = (colNum: '1' | '2') => {
-      const colEntries = entries.filter(e => e.column === colNum);
-      if (colEntries.length === 0) return '';
-      
-      let colXml = `        <!-- COLUMN ${colNum} -->\n`;
-      colXml += `        <div type="column" n="${colNum}">\n\n`;
-      
-      colEntries.forEach((entry, idx) => {
-        const eid = `p1e${(entries.indexOf(entry) + 1).toString().padStart(3, '0')}`;
-        colXml += `          <entry xml:id="${eid}">\n`;
-        colXml += `            <form type="lemma">\n`;
-        colXml += `              <orth type="orig" xml:lang="maz"${certain(entry.uncertain_maz)}>${entry.old_maz}</orth>\n`;
-        colXml += `              <orth type="norm" xml:lang="maz">${entry.new_maz}</orth>\n`;
-        colXml += `            </form>\n`;
-        
-        if (entry.variant) {
-          colXml += `            <form type="variant">\n`;
-          colXml += `              <usg type="textual" xml:lang="lat"><choice><abbr>${entry.variant.usg}</abbr><expan>vel</expan></choice></usg>\n`;
-          colXml += `              <orth type="orig" xml:lang="maz">${entry.variant.orig}</orth>\n`;
-          colXml += `              <orth type="norm" xml:lang="maz">${entry.variant.norm}</orth>\n`;
-          colXml += `            </form>\n`;
-        }
+    const renderEntry = (e: TranscriptionEntry) => {
+      const entryIdx = entries.indexOf(e) + 1;
+      const eid = `p1e${entryIdx.toString().padStart(3, '0')}`;
+      let xml = `          <entry xml:id="${eid}">\n`;
+      xml += `            <form type="lemma">\n`;
+      xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${e.old_maz}</orth>\n`;
+      xml += `              <orth type="norm" xml:lang="maz">${e.new_maz}</orth>\n`;
+      xml += `            </form>\n`;
 
-        colXml += `            <sense>\n`;
-        colXml += `              <def type="orig" xml:lang="spa"${certain(entry.uncertain_spa)}>${entry.old_spa}</def>\n`;
-        colXml += `              <def type="norm" xml:lang="spa">${entry.new_spa}</def>\n`;
-        colXml += `              <def type="gloss" xml:lang="eng"${certain(entry.uncertain_eng)}>${entry.eng_gloss}</def>\n`;
-        colXml += `            </sense>\n`;
-        
-        entry.notes.forEach(note => {
-          colXml += `            <note type="${note.type}" resp="#${note.resp}">${note.text}</note>\n`;
-        });
-        
-        colXml += `            <lb n="${entry.line}"/>\n`;
-        colXml += `          </entry>\n\n`;
+      if (e.variant) {
+        xml += `            <form type="variant">\n`;
+        xml += `              <usg type="textual" xml:lang="lat"><choice><abbr>${e.variant.usg}</abbr><expan>vel</expan></choice></usg>\n`;
+        xml += `              <orth type="orig" xml:lang="maz">${e.variant.orig}</orth>\n`;
+        xml += `              <orth type="norm" xml:lang="maz">${e.variant.norm}</orth>\n`;
+        xml += `            </form>\n`;
+      }
+
+      xml += `            <sense>\n`;
+      xml += `              <def type="orig" xml:lang="spa"${cert(e.uncertain_spa)}>${e.old_spa}</def>\n`;
+      xml += `              <def type="norm" xml:lang="spa">${e.new_spa}</def>\n`;
+      xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${e.eng_gloss}</def>\n`;
+      xml += `            </sense>\n`;
+      
+      e.notes.forEach(n => {
+        xml += `            <note type="${n.type}" resp="#${n.resp}">${n.text}</note>\n`;
       });
       
-      colXml += `        </div>\n`;
-      return colXml;
+      xml += `            <lb n="${e.line}"/>\n`;
+      xml += `          </entry>\n`;
+      return xml;
+    };
+
+    const renderColumn = (layoutType: 'col1' | 'col2', n: string) => {
+      const filtered = entries.filter(e => e.layout === layoutType);
+      if (filtered.length === 0) return `        <div type="column" n="${n}"></div>`;
+      return `        <div type="column" n="${n}">\n${filtered.map(renderEntry).join('\n')}\n        </div>`;
     };
 
     return `<?xml version="1.0" encoding="UTF-8"?>
@@ -174,8 +174,11 @@ const App: React.FC = () => {
           <title type="norm" xml:lang="spa">${metadata.title_norm}</title>
           <title type="gloss" xml:lang="eng">${metadata.title_gloss}</title>
         </head>
-${renderColumn('1')}
-${renderColumn('2')}
+${entries.filter(e => e.layout === 'across').map(renderEntry).join('\n')}
+        <!-- COLUMN 1 -->
+${renderColumn('col1', '1')}
+        <!-- COLUMN 2 -->
+${renderColumn('col2', '2')}
       </div>
     </body>
   </text>
@@ -209,94 +212,117 @@ ${renderColumn('2')}
         };
 
         const entries: TranscriptionEntry[] = [];
+        const entryRegex = /<entry xml:id=".*?">(.*?)<\/entry>/gs;
+
+        const vocabularyBody = xml.split('<div type="vocabulary">')[1]?.split('</body>')[0] || '';
+        const acrossContent = vocabularyBody.split(/<div type="column"/)[0];
+        let acrossMatch;
+        while ((acrossMatch = entryRegex.exec(acrossContent)) !== null) {
+          entries.push(parseEntryContent(acrossMatch[1], 'across'));
+        }
+
         const colRegex = /<div type="column" n="(1|2)">(.*?)<\/div>/gs;
         let colMatch;
         while ((colMatch = colRegex.exec(xml)) !== null) {
-          const colNum = colMatch[1] as '1' | '2';
+          const colLayout = colMatch[1] === '1' ? 'col1' : 'col2';
           const colContent = colMatch[2];
-          const entryRegex = /<entry.*?>\s*<form type="lemma">(.*?)<\/form>(?:\s*<form type="variant">(.*?)<\/form>)?\s*<sense>(.*?)<\/sense>(.*?)\s*<lb n="(.*?)".*?>\s*<\/entry>/gs;
           let eMatch;
           while ((eMatch = entryRegex.exec(colContent)) !== null) {
-            const [, lemma, variant, sense, notesRaw, line] = eMatch;
-            const old_maz = lemma.match(/<orth type="orig".*?>(.*?)<\/orth>/)?.[1] || '';
-            const new_maz = lemma.match(/<orth type="norm".*?>(.*?)<\/orth>/)?.[1] || '';
-            const unc_maz = lemma.includes('certain="no"');
-
-            const old_spa = sense.match(/<def type="orig".*?>(.*?)<\/def>/)?.[1] || '';
-            const new_spa = sense.match(/<def type="norm".*?>(.*?)<\/def>/)?.[1] || '';
-            const unc_spa = sense.includes('certain="no"');
-            const eng_gloss = sense.match(/<def type="gloss".*?>(.*?)<\/def>/)?.[1] || '';
-            const unc_eng = sense.match(/<def type="gloss".*?certain="no"/);
-
-            const notes: NoteEntry[] = [];
-            const noteRegex = /<note type="(.*?)" resp="#(.*?)">(.*?)<\/note>/g;
-            let nMatch;
-            while ((nMatch = noteRegex.exec(notesRaw)) !== null) {
-              notes.push({ id: crypto.randomUUID(), type: nMatch[1], resp: nMatch[2], text: nMatch[3] });
-            }
-
-            entries.push({
-              id: crypto.randomUUID(),
-              column: colNum,
-              line,
-              old_maz, new_maz, uncertain_maz: unc_maz,
-              old_spa, new_spa, uncertain_spa: unc_spa,
-              eng_gloss, uncertain_eng: !!unc_eng,
-              notes
-            });
+            entries.push(parseEntryContent(eMatch[1], colLayout));
           }
         }
+
         setState({ metadata, entries: entries.length ? entries : [createNewEntry()] });
-      } catch (err) { alert("Failed to parse TEI XML."); }
+      } catch (err) { alert("Import failed. Please check TEI XML structure."); }
     };
     reader.readAsText(file);
   };
 
-  return (
-    <div className="flex flex-col lg:flex-row bg-slate-50 h-screen overflow-hidden">
-      <input type="file" ref={fileInputRef} onChange={handleImport} accept=".xml" className="hidden" />
-      <div className="flex-1 overflow-y-auto p-6 lg:p-10 bg-white shadow-inner">
-        <header className="mb-8 flex justify-between items-center border-b pb-4">
-          <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase">TEI Transcriber <span className="text-blue-500 font-light">P5</span></h1>
-          <button onClick={() => confirm('Reset?') && setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] })} className="text-xs text-red-500 font-bold uppercase hover:bg-red-50 px-2 py-1 rounded transition-colors">Reset Session</button>
-        </header>
+  const parseEntryContent = (content: string, layout: 'col1' | 'col2' | 'across'): TranscriptionEntry => {
+    const old_maz = content.match(/<form type="lemma">.*?<orth type="orig".*?>(.*?)<\/orth>/s)?.[1] || '';
+    const new_maz = content.match(/<form type="lemma">.*?<orth type="norm".*?>(.*?)<\/orth>/s)?.[1] || '';
+    const unc_maz = content.includes('certain="no"');
 
-        <section className="mb-10"><MetadataForm metadata={state.metadata} onChange={updateMetadata} /></section>
-        
-        <section className="space-y-6 pb-20">
-          <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg">
-             <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Transcription Entry Stack</h2>
-             <div className="flex gap-4">
-                <span className="text-[10px] text-blue-600 font-bold">Col 1: {state.entries.filter(e => e.column === '1').length}</span>
-                <span className="text-[10px] text-purple-600 font-bold">Col 2: {state.entries.filter(e => e.column === '2').length}</span>
-             </div>
+    let variant: any = undefined;
+    const variantMatch = content.match(/<form type="variant">.*?<abbr>(.*?)<\/abbr>.*?<orth type="orig".*?>(.*?)<\/orth>.*?<orth type="norm".*?>(.*?)<\/orth>/s);
+    if (variantMatch) {
+      variant = { id: crypto.randomUUID(), usg: variantMatch[1], orig: variantMatch[2], norm: variantMatch[3] };
+    }
+
+    const old_spa = content.match(/<def type="orig".*?>(.*?)<\/def>/)?.[1] || '';
+    const new_spa = content.match(/<def type="norm".*?>(.*?)<\/def>/)?.[1] || '';
+    const unc_spa = /<def type="orig".*?certain="no"/.test(content);
+    const eng_gloss = content.match(/<def type="gloss".*?>(.*?)<\/def>/)?.[1] || '';
+    const unc_eng = /<def type="gloss".*?certain="no"/.test(content);
+    const line = content.match(/<lb n="(.*?)"/)?.[1] || '';
+
+    const notes: any[] = [];
+    const noteRegex = /<note type="(.*?)" resp="#(.*?)">(.*?)<\/note>/g;
+    let nMatch;
+    while ((nMatch = noteRegex.exec(content)) !== null) {
+      notes.push({ id: crypto.randomUUID(), type: nMatch[1], resp: nMatch[2], text: nMatch[3] });
+    }
+
+    return { id: crypto.randomUUID(), layout, line, old_maz, new_maz, uncertain_maz: unc_maz, old_spa, new_spa, uncertain_spa: unc_spa, eng_gloss, uncertain_eng: unc_eng, variant, notes };
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-100">
+      <input type="file" ref={fileInputRef} onChange={handleImport} accept=".xml" className="hidden" />
+      <div className="flex-1 flex flex-col min-w-0 bg-white">
+        <header className="p-4 border-b flex justify-between items-center bg-white z-10 shrink-0">
+          <div>
+             <h1 className="text-xl font-black tracking-tight text-slate-800 uppercase">TEI <span className="text-blue-600">Manuscript</span> Workspace</h1>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lancaster University • Isabel Klint</p>
           </div>
-          {state.entries.map((entry, index) => (
-            <EntryItem key={entry.id} entry={entry} index={index} onUpdate={u => updateEntry(entry.id, u)} onRemove={() => removeEntry(entry.id)} onDuplicate={() => {
-              const idx = state.entries.findIndex(e => e.id === entry.id);
-              const copy = { ...entry, id: crypto.randomUUID(), line: (parseFloat(entry.line) + 1).toFixed(1) };
-              const news = [...state.entries]; news.splice(idx + 1, 0, copy);
-              setState(p => ({ ...p, entries: news }));
-            }} />
-          ))}
-          <button onClick={addEntry} className="w-full py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-all flex flex-col items-center gap-2">
-            <i className="fa-solid fa-plus text-xl"></i>
-            <span className="text-[10px] font-bold uppercase tracking-widest">Add Entry</span>
-          </button>
-        </section>
+          <div className="flex gap-4">
+             <button onClick={() => confirm('Reset?') && setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] })} className="px-3 py-1.5 text-[10px] font-black text-red-500 uppercase hover:bg-red-50 rounded">Reset</button>
+          </div>
+        </header>
+        
+        <main className="flex-1 overflow-y-auto p-6 lg:p-12 space-y-12 bg-slate-50/30">
+          <section className="max-w-6xl mx-auto">
+             <MetadataForm metadata={state.metadata} onChange={updateMetadata} />
+          </section>
+
+          <section className="max-w-6xl mx-auto space-y-8 pb-32">
+             <div className="grid gap-6">
+                {state.entries.map((entry, index) => (
+                  <EntryItem 
+                    key={entry.id} 
+                    entry={entry} 
+                    index={index} 
+                    onUpdate={u => updateEntry(entry.id, u)} 
+                    onRemove={() => removeEntry(entry.id)} 
+                    onDuplicate={() => {
+                      const idx = state.entries.findIndex(e => e.id === entry.id);
+                      const copy = { ...entry, id: crypto.randomUUID(), line: (parseFloat(entry.line) + 1).toFixed(1) };
+                      const news = [...state.entries]; news.splice(idx + 1, 0, copy);
+                      setState(p => ({ ...p, entries: news }));
+                    }}
+                  />
+                ))}
+             </div>
+
+             <button onClick={addEntry} className="w-full py-12 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all group">
+                <i className="fa-solid fa-plus text-xl group-hover:scale-110 transition-transform"></i>
+                <span className="text-[11px] font-black uppercase tracking-widest">Record Next Entry</span>
+             </button>
+          </section>
+        </main>
       </div>
 
-      <aside className="w-full lg:w-[480px] bg-[#0f172a] flex flex-col h-screen border-l border-slate-800">
-        <div className="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TEI P5 Output</span>
-          <div className="flex gap-2">
-            <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 bg-slate-700 text-white text-[10px] font-bold uppercase rounded hover:bg-slate-600 transition-colors">Import</button>
-            <button onClick={() => {
-              const blob = new Blob([generatedXML], { type: 'text/xml' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a'); a.href = url; a.download = 'tei_transcription.xml'; a.click();
-            }} className="px-3 py-1.5 bg-blue-600 text-white text-[10px] font-bold uppercase rounded hover:bg-blue-500 transition-colors">Download</button>
-          </div>
+      <aside className="w-[520px] bg-[#1a1c23] flex flex-col shrink-0 border-l border-slate-800">
+        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#1a1c23]">
+           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">Live TEI P5 Output</span>
+           <div className="flex gap-2">
+              <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-black uppercase rounded hover:bg-slate-700">Import</button>
+              <button onClick={() => {
+                const blob = new Blob([generatedXML], { type: 'text/xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'tei_transcription.xml'; a.click();
+              }} className="px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase rounded hover:bg-blue-500 shadow-lg shadow-blue-900/40">Download</button>
+           </div>
         </div>
         <XMLPreview content={generatedXML} />
       </aside>
