@@ -1,20 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types';
+import { generateId } from './utils';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
-
-// Fallback for crypto.randomUUID if environment is not secure (non-HTTPS)
-const generateId = () => {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-  } catch (e) {
-    // Fallback to manual ID
-  }
-  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-};
 
 const INITIAL_METADATA: Metadata = {
   title_orig: 'Vocabulario en Ydioma Mazateco',
@@ -78,19 +67,28 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('tei_p5_v8_state');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Ensure the parsed data has the expected structure
-        if (Array.isArray(parsed.entries)) {
-          return parsed;
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
+          // Add safety check for entry structure
+          const validatedEntries = parsed.entries.map((e: any) => ({
+            ...e,
+            id: e.id || generateId(),
+            notes: Array.isArray(e.notes) ? e.notes : [],
+          }));
+          return { ...parsed, entries: validatedEntries };
         }
       }
     } catch (err) {
-      console.error("Corrupted state in localStorage, resetting...", err);
+      console.error("Failed to load local storage state:", err);
     }
     return { metadata: INITIAL_METADATA, entries: [createNewEntry()] };
   });
 
   useEffect(() => {
-    localStorage.setItem('tei_p5_v8_state', JSON.stringify(state));
+    try {
+      localStorage.setItem('tei_p5_v8_state', JSON.stringify(state));
+    } catch (e) {
+      console.error("Failed to save state to localStorage:", e);
+    }
   }, [state]);
 
   useEffect(() => {

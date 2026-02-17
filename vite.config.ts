@@ -3,12 +3,13 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // Use './' to ensure all assets are linked relatively for GitHub Pages compatibility
+  // Essential for GitHub Pages sub-directory hosting
   base: './',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: false
+    sourcemap: false,
+    minify: 'terser',
   },
   server: {
     port: 3000

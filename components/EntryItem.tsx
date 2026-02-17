@@ -1,5 +1,6 @@
 import React from 'react';
 import { TranscriptionEntry, NoteEntry, NOTE_TYPES, KirkSet, DaughterWord } from '../types';
+import { generateId } from '../utils';
 
 interface Props {
   entry: TranscriptionEntry;
@@ -27,12 +28,12 @@ const UncertainBox = ({ label, active, onChange }: { label: string, active: bool
 );
 
 const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplicate }) => {
-  const addNote = () => onUpdate({ notes: [...entry.notes, { id: crypto.randomUUID(), type: 'editorial', resp: 'IK', text: '' }] });
+  const addNote = () => onUpdate({ notes: [...entry.notes, { id: generateId(), type: 'editorial', resp: 'IK', text: '' }] });
   const updateNote = (id: string, u: Partial<NoteEntry>) => onUpdate({ notes: entry.notes.map(n => n.id === id ? { ...n, ...u } : n) });
   const removeNote = (id: string) => onUpdate({ notes: entry.notes.filter(n => n.id !== id) });
 
   const toggleVariant = () => {
-    onUpdate({ variant: entry.variant ? undefined : { id: crypto.randomUUID(), usg: 'v.l.', orig: '', norm: '' } });
+    onUpdate({ variant: entry.variant ? undefined : { id: generateId(), usg: 'v.l.', orig: '', norm: '' } });
   };
 
   const toggleKirk = () => {
@@ -47,7 +48,7 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
 
   const addDaughter = () => {
     if (entry.kirk_set) {
-      updateKirk({ daughters: [...entry.kirk_set.daughters, { id: crypto.randomUUID(), text: '', matches: false }] });
+      updateKirk({ daughters: [...entry.kirk_set.daughters, { id: generateId(), text: '', matches: false }] });
     }
   };
 
@@ -265,7 +266,11 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
                                onChange={e => updateDaughter(d.id, { text: e.target.value })}
                                className="flex-1 text-[10px] outline-none"
                              />
-                             <button onClick={() => updateKirk({ daughters: entry.kirk_set!.daughters.filter(x => x.id !== d.id) })} className="text-slate-200 hover:text-red-400">
+                             <button onClick={() => {
+                               if (entry.kirk_set) {
+                                 updateKirk({ daughters: entry.kirk_set.daughters.filter(x => x.id !== d.id) });
+                               }
+                             }} className="text-slate-200 hover:text-red-400">
                                <i className="fa-solid fa-times text-[10px]"></i>
                              </button>
                           </div>
