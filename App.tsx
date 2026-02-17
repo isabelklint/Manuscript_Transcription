@@ -1,8 +1,20 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types.ts';
-import MetadataForm from './components/MetadataForm.tsx';
-import EntryItem from './components/EntryItem.tsx';
-import XMLPreview from './components/XMLPreview.tsx';
+import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types';
+import MetadataForm from './components/MetadataForm';
+import EntryItem from './components/EntryItem';
+import XMLPreview from './components/XMLPreview';
+
+// Fallback for crypto.randomUUID if environment is not secure (non-HTTPS)
+const generateId = () => {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch (e) {
+    // Fallback to manual ID
+  }
+  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+};
 
 const INITIAL_METADATA: Metadata = {
   title_orig: 'Vocabulario en Ydioma Mazateco',
@@ -41,7 +53,7 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
     }
   }
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     layout: lastEntry?.layout || 'col1',
     line: nextLine,
     old_maz: '',
@@ -62,8 +74,18 @@ const App: React.FC = () => {
   const [importSuccess, setImportSuccess] = useState(false);
   
   const [state, setState] = useState<TranscriptionState>(() => {
-    const saved = localStorage.getItem('tei_p5_v8_state');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('tei_p5_v8_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Ensure the parsed data has the expected structure
+        if (Array.isArray(parsed.entries)) {
+          return parsed;
+        }
+      }
+    } catch (err) {
+      console.error("Corrupted state in localStorage, resetting...", err);
+    }
     return { metadata: INITIAL_METADATA, entries: [createNewEntry()] };
   });
 
@@ -238,7 +260,7 @@ ${renderColumn('col2', '2')}
     let variant: any = undefined;
     const variantMatch = content.match(/<form type="variant">[\s\S]*?<usg[^>]*?>(.*?)<\/usg>[\s\S]*?<orth type="orig"[^>]*?>(.*?)<\/orth>[\s\S]*?<orth type="norm"[^>]*?>(.*?)<\/orth>/i);
     if (variantMatch) {
-      variant = { id: crypto.randomUUID(), usg: variantMatch[1], orig: variantMatch[2], norm: variantMatch[3] };
+      variant = { id: generateId(), usg: variantMatch[1], orig: variantMatch[2], norm: variantMatch[3] };
     }
 
     const old_spa = content.match(/<def type="orig" xml:lang="spa"[^>]*?>(.*?)<\/def>/i)?.[1] || '';
@@ -258,7 +280,7 @@ ${renderColumn('col2', '2')}
       let iMatch;
       while ((iMatch = itemRegex.exec(kirkContent)) !== null) {
         daughters.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           text: iMatch[2],
           matches: iMatch[1].includes('cert="high"')
         });
@@ -273,7 +295,7 @@ ${renderColumn('col2', '2')}
       const typeMatch = nMatch[1].match(/type="(.*?)"/i);
       if (typeMatch?.[1] === 'kirk') continue; // Handled separately
       notes.push({ 
-        id: crypto.randomUUID(), 
+        id: generateId(), 
         type: typeMatch ? typeMatch[1] : 'editorial', 
         resp: nMatch[2], 
         text: nMatch[3] 
@@ -281,7 +303,7 @@ ${renderColumn('col2', '2')}
     }
     
     return { 
-      id: crypto.randomUUID(), 
+      id: generateId(), 
       layout, 
       line, 
       old_maz, 
@@ -437,7 +459,7 @@ ${renderColumn('col2', '2')}
                     onRemove={() => removeEntry(entry.id)} 
                     onDuplicate={() => {
                       const idx = state.entries.findIndex(e => e.id === entry.id);
-                      const copy = { ...entry, id: crypto.randomUUID(), line: (parseFloat(entry.line) + 1).toFixed(1) };
+                      const copy = { ...entry, id: generateId(), line: (parseFloat(entry.line) + 1).toFixed(1) };
                       const news = [...state.entries]; news.splice(idx + 1, 0, copy);
                       setState(p => ({ ...p, entries: news }));
                     }}
