@@ -19,6 +19,7 @@ export interface DaughterWord {
 }
 
 export interface KirkSet {
+  id: string;
   number: string;
   protoForm: string;
   page: string;
@@ -38,7 +39,7 @@ export interface TranscriptionEntry {
   eng_gloss: string;
   uncertain_eng: boolean;
   ipa?: string;
-  kirk_set?: KirkSet;
+  kirk_sets: KirkSet[];
   variant?: VariantEntry;
   notes: NoteEntry[];
 }

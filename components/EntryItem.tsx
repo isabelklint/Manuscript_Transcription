@@ -36,25 +36,47 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
     onUpdate({ variant: entry.variant ? undefined : { id: generateId(), usg: 'v.l.', orig: '', norm: '' } });
   };
 
-  const toggleKirk = () => {
-    onUpdate({ 
-      kirk_set: entry.kirk_set ? undefined : { number: '', protoForm: '', page: '', daughters: [] } 
-    });
+  const addKirkSet = () => {
+    const newSet: KirkSet = {
+      id: generateId(),
+      number: '',
+      protoForm: '',
+      page: '',
+      daughters: []
+    };
+    onUpdate({ kirk_sets: [...entry.kirk_sets, newSet] });
   };
 
-  const updateKirk = (u: Partial<KirkSet>) => {
-    if (entry.kirk_set) onUpdate({ kirk_set: { ...entry.kirk_set, ...u } });
+  const updateKirkSet = (id: string, u: Partial<KirkSet>) => {
+    onUpdate({ kirk_sets: entry.kirk_sets.map(ks => ks.id === id ? { ...ks, ...u } : ks) });
   };
 
-  const addDaughter = () => {
-    if (entry.kirk_set) {
-      updateKirk({ daughters: [...entry.kirk_set.daughters, { id: generateId(), text: '', matches: false }] });
+  const removeKirkSet = (id: string) => {
+    onUpdate({ kirk_sets: entry.kirk_sets.filter(ks => ks.id !== id) });
+  };
+
+  const addDaughter = (ksId: string) => {
+    const targetSet = entry.kirk_sets.find(ks => ks.id === ksId);
+    if (targetSet) {
+      updateKirkSet(ksId, { daughters: [...targetSet.daughters, { id: generateId(), text: '', matches: false }] });
     }
   };
 
-  const updateDaughter = (id: string, u: Partial<DaughterWord>) => {
-    if (entry.kirk_set) {
-      updateKirk({ daughters: entry.kirk_set.daughters.map(d => d.id === id ? { ...d, ...u } : d) });
+  const updateDaughter = (ksId: string, dId: string, u: Partial<DaughterWord>) => {
+    const targetSet = entry.kirk_sets.find(ks => ks.id === ksId);
+    if (targetSet) {
+      updateKirkSet(ksId, { 
+        daughters: targetSet.daughters.map(d => d.id === dId ? { ...d, ...u } : d) 
+      });
+    }
+  };
+
+  const removeDaughter = (ksId: string, dId: string) => {
+    const targetSet = entry.kirk_sets.find(ks => ks.id === ksId);
+    if (targetSet) {
+      updateKirkSet(ksId, { 
+        daughters: targetSet.daughters.filter(d => d.id !== dId) 
+      });
     }
   };
 
@@ -206,79 +228,94 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
              </div>
 
              <div className="pt-2">
-                <button 
-                  onClick={toggleKirk}
-                  className={`w-full text-[9px] font-black uppercase px-2 py-2 rounded border transition-colors ${entry.kirk_set ? 'bg-purple-600 border-purple-700 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}
-                >
-                  {entry.kirk_set ? 'Kirk Comparative Set Active' : '+ Manage Kirk Set'}
-                </button>
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="text-[8px] font-black text-purple-600 uppercase tracking-widest">Kirk Sets</h5>
+                  <button 
+                    onClick={addKirkSet}
+                    className="text-[9px] font-black uppercase text-purple-600 hover:underline"
+                  >
+                    + Add New Set
+                  </button>
+                </div>
 
-                {entry.kirk_set && (
-                  <div className="mt-3 p-3 bg-purple-50/50 border border-purple-200 rounded-lg space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {entry.kirk_sets.map((ks) => (
+                    <div key={ks.id} className="p-3 bg-purple-50/50 border border-purple-200 rounded-lg space-y-4 relative group/kirk">
+                      <button 
+                        onClick={() => removeKirkSet(ks.id)}
+                        className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/kirk:opacity-100 transition-opacity"
+                      >
+                        <i className="fa-solid fa-trash-can text-[10px]"></i>
+                      </button>
+                      
+                      <div className="grid grid-cols-2 gap-2 pr-6">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-purple-600 uppercase">Set #</label>
+                          <input 
+                            type="text" 
+                            value={ks.number} 
+                            onChange={e => updateKirkSet(ks.id, { number: e.target.value })}
+                            className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-purple-600 uppercase">Kirk Page</label>
+                          <input 
+                            type="text" 
+                            value={ks.page} 
+                            onChange={e => updateKirkSet(ks.id, { page: e.target.value })}
+                            className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      
                       <div className="space-y-1">
-                        <label className="text-[8px] font-bold text-purple-600 uppercase">Set #</label>
+                        <label className="text-[8px] font-bold text-purple-600 uppercase">Proto-Form (Headword)</label>
                         <input 
                           type="text" 
-                          value={entry.kirk_set.number} 
-                          onChange={e => updateKirk({ number: e.target.value })}
-                          className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                          value={ks.protoForm} 
+                          onChange={e => updateKirkSet(ks.id, { protoForm: e.target.value })}
+                          className="w-full text-xs font-bold px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
+                          placeholder="*proto"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-bold text-purple-600 uppercase">Kirk Page</label>
-                        <input 
-                          type="text" 
-                          value={entry.kirk_set.page} 
-                          onChange={e => updateKirk({ page: e.target.value })}
-                          className="w-full text-[10px] px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
-                        />
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">Daughter Forms</label>
+                          <button onClick={() => addDaughter(ks.id)} className="text-[8px] font-black text-purple-600 uppercase hover:underline">+ Add</button>
+                        </div>
+                        <div className="space-y-1">
+                          {ks.daughters.map(d => (
+                            <div key={d.id} className="flex items-center gap-1.5 bg-white p-1 rounded border border-purple-100">
+                               <button 
+                                 onClick={() => updateDaughter(ks.id, d.id, { matches: !d.matches })}
+                                 className={`w-4 h-4 rounded-sm flex items-center justify-center transition-colors ${d.matches ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'}`}
+                               >
+                                 <i className="fa-solid fa-check text-[8px]"></i>
+                               </button>
+                               <input 
+                                 type="text" 
+                                 value={d.text} 
+                                 onChange={e => updateDaughter(ks.id, d.id, { text: e.target.value })}
+                                 className="flex-1 text-[10px] outline-none"
+                               />
+                               <button onClick={() => removeDaughter(ks.id, d.id)} className="text-slate-200 hover:text-red-400">
+                                 <i className="fa-solid fa-times text-[10px]"></i>
+                               </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-bold text-purple-600 uppercase">Proto-Form (Headword)</label>
-                      <input 
-                        type="text" 
-                        value={entry.kirk_set.protoForm} 
-                        onChange={e => updateKirk({ protoForm: e.target.value })}
-                        className="w-full text-xs font-bold px-2 py-1 bg-white border border-purple-200 rounded focus:outline-none"
-                        placeholder="*proto"
-                      />
+                  ))}
+                  
+                  {entry.kirk_sets.length === 0 && (
+                    <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase italic">No Kirk Sets Added</p>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[8px] font-bold text-slate-500 uppercase">Daughter Forms</label>
-                        <button onClick={addDaughter} className="text-[8px] font-black text-purple-600 uppercase hover:underline">+ Add</button>
-                      </div>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {entry.kirk_set.daughters.map(d => (
-                          <div key={d.id} className="flex items-center gap-1.5 bg-white p-1 rounded border border-purple-100">
-                             <button 
-                               onClick={() => updateDaughter(d.id, { matches: !d.matches })}
-                               className={`w-4 h-4 rounded-sm flex items-center justify-center transition-colors ${d.matches ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'}`}
-                             >
-                               <i className="fa-solid fa-check text-[8px]"></i>
-                             </button>
-                             <input 
-                               type="text" 
-                               value={d.text} 
-                               onChange={e => updateDaughter(d.id, { text: e.target.value })}
-                               className="flex-1 text-[10px] outline-none"
-                             />
-                             <button onClick={() => {
-                               if (entry.kirk_set) {
-                                 updateKirk({ daughters: entry.kirk_set.daughters.filter(x => x.id !== d.id) });
-                               }
-                             }} className="text-slate-200 hover:text-red-400">
-                               <i className="fa-solid fa-times text-[10px]"></i>
-                             </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
              </div>
           </div>
         </div>

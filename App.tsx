@@ -53,6 +53,7 @@ const createNewEntry = (lastEntry?: TranscriptionEntry): TranscriptionEntry => {
     uncertain_spa: false,
     eng_gloss: '',
     uncertain_eng: false,
+    kirk_sets: [],
     notes: [],
   };
 };
@@ -68,12 +69,20 @@ const App: React.FC = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
-          // Add safety check for entry structure
-          const validatedEntries = parsed.entries.map((e: any) => ({
-            ...e,
-            id: e.id || generateId(),
-            notes: Array.isArray(e.notes) ? e.notes : [],
-          }));
+          // Add safety check and migration for multiple kirk sets
+          const validatedEntries = parsed.entries.map((e: any) => {
+            let kirk_sets = Array.isArray(e.kirk_sets) ? e.kirk_sets : [];
+            // Migration: if old single kirk_set exists, move to array
+            if (e.kirk_set && kirk_sets.length === 0) {
+              kirk_sets = [{ ...e.kirk_set, id: e.kirk_set.id || generateId() }];
+            }
+            return {
+              ...e,
+              id: e.id || generateId(),
+              kirk_sets,
+              notes: Array.isArray(e.notes) ? e.notes : [],
+            };
+          });
           return { ...parsed, entries: validatedEntries };
         }
       }
@@ -158,17 +167,17 @@ const App: React.FC = () => {
       xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${e.eng_gloss}</def>\n`;
       xml += `            </sense>\n`;
       
-      if (e.kirk_set) {
-        xml += `            <note type="kirk" n="${e.kirk_set.number}" target="${e.kirk_set.page}">\n`;
-        xml += `              <hi type="proto">${e.kirk_set.protoForm}</hi>\n`;
+      e.kirk_sets.forEach(ks => {
+        xml += `            <note type="kirk" n="${ks.number}" target="${ks.page}">\n`;
+        xml += `              <hi type="proto">${ks.protoForm}</hi>\n`;
         xml += `              <list type="daughters">\n`;
-        e.kirk_set.daughters.forEach(d => {
+        ks.daughters.forEach(d => {
           const matchAttr = d.matches ? ' cert="high"' : ' cert="low"';
           xml += `                <item${matchAttr}>${d.text}</item>\n`;
         });
         xml += `              </list>\n`;
         xml += `            </note>\n`;
-      }
+      });
 
       e.notes.forEach(n => {
         const typeAttr = n.type && n.type !== 'none' ? ` type="${n.type}"` : '';
@@ -268,9 +277,10 @@ ${renderColumn('col2', '2')}
     const unc_eng = /<def type="gloss"[^>]*?certain="no"/i.test(content);
     const line = content.match(/<lb n="(.*?)"/i)?.[1] || '';
     
-    let kirk_set: KirkSet | undefined = undefined;
-    const kirkMatch = content.match(/<note type="kirk" n="(.*?)" target="(.*?)">([\s\S]*?)<\/note>/i);
-    if (kirkMatch) {
+    const kirk_sets: KirkSet[] = [];
+    const kirkRegex = /<note type="kirk" n="(.*?)" target="(.*?)">([\s\S]*?)<\/note>/gi;
+    let kirkMatch;
+    while ((kirkMatch = kirkRegex.exec(content)) !== null) {
       const kirkContent = kirkMatch[3];
       const protoForm = kirkContent.match(/<hi type="proto">(.*?)<\/hi>/i)?.[1] || '';
       const daughters: DaughterWord[] = [];
@@ -283,7 +293,7 @@ ${renderColumn('col2', '2')}
           matches: iMatch[1].includes('cert="high"')
         });
       }
-      kirk_set = { number: kirkMatch[1], page: kirkMatch[2], protoForm, daughters };
+      kirk_sets.push({ id: generateId(), number: kirkMatch[1], page: kirkMatch[2], protoForm, daughters });
     }
 
     const notes: any[] = [];
@@ -314,7 +324,7 @@ ${renderColumn('col2', '2')}
       eng_gloss, 
       uncertain_eng: unc_eng, 
       variant, 
-      kirk_set,
+      kirk_sets,
       notes
     };
   };
