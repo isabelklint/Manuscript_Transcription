@@ -4,9 +4,24 @@ import { generateId } from './utils';
 import { INITIAL_METADATA } from './constants';
 import { generateXML, generateExportFilename } from './xmlGenerator';
 import { parseXML } from './xmlImporter';
+import {
+  DriveFile,
+  initTokenClient,
+  requestToken,
+  listXmlFiles,
+  saveFile as driveSaveFile,
+  downloadFile as driveDownloadFile,
+} from './driveClient';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
+import DriveModal from './components/DriveModal';
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+// Set VITE_GOOGLE_CLIENT_ID in a .env file at the project root.
+// If absent, Drive features are hidden.
+const DRIVE_CLIENT_ID: string = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ?? '';
 
 // ─── State helpers ────────────────────────────────────────────────────────────
 
@@ -37,7 +52,6 @@ const loadInitialState = (): TranscriptionState => {
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
         const validatedEntries = parsed.entries.map((e: any) => {
           let kirk_sets = Array.isArray(e.kirk_sets) ? e.kirk_sets : [];
-          // Migration: old single kirk_set → array
           if (e.kirk_set && kirk_sets.length === 0) {
             kirk_sets = [{ ...e.kirk_set, id: e.kirk_set.id || generateId() }];
           }
@@ -56,13 +70,26 @@ const loadInitialState = (): TranscriptionState => {
 
 const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging]     = useState(false);
-  const [importSuccess, setImportSuccess] = useState(false);
-  const [state, setState]               = useState<TranscriptionState>(loadInitialState);
 
+  // ── Core state ─────────────────────────────────────────────────────────────
+  const [state, setState]                 = useState<TranscriptionState>(loadInitialState);
+  const [isDragging, setIsDragging]       = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+
+  // ── Drive state ────────────────────────────────────────────────────────────
+  const [driveToken,   setDriveToken]   = useState<string | null>(null);
+  const [driveFileId,  setDriveFileId]  = useState<string | null>(null); // current open Drive file
+  const [driveSaving,  setDriveSaving]  = useState(false);
+  const [driveSaved,   setDriveSaved]   = useState(false);
+  const [driveModal,   setDriveModal]   = useState(false);
+  const [driveFiles,   setDriveFiles]   = useState<DriveFile[]>([]);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveError,   setDriveError]   = useState<string | null>(null);
+
+  // ── Persistence ────────────────────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem('tei_p5_v8_state', JSON.stringify(state)); }
-    catch (e) { console.error('Failed to save state to localStorage:', e); }
+    catch (e) { console.error('Failed to save state:', e); }
   }, [state]);
 
   useEffect(() => {
@@ -71,8 +98,17 @@ const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [importSuccess]);
 
-  // ── Updaters ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!driveSaved) return;
+    const t = setTimeout(() => setDriveSaved(false), 3000);
+    return () => clearTimeout(t);
+  }, [driveSaved]);
 
+  // ── Derived values ─────────────────────────────────────────────────────────
+  const generatedXML   = useMemo(() => generateXML(state),                    [state]);
+  const exportFileName = useMemo(() => generateExportFilename(state.metadata), [state.metadata]);
+
+  // ── Transcription updaters ─────────────────────────────────────────────────
   const updateMetadata = (field: keyof Metadata, value: string) =>
     setState(prev => ({ ...prev, metadata: { ...prev.metadata, [field]: value } }));
 
@@ -98,8 +134,7 @@ const App: React.FC = () => {
       if (idx === -1) return prev;
       const src = prev.entries[idx];
       const copy: TranscriptionEntry = {
-        ...src,
-        id: generateId(),
+        ...src, id: generateId(),
         line: (parseFloat(src.line) + 1).toFixed(1),
       };
       const next = [...prev.entries];
@@ -111,56 +146,112 @@ const App: React.FC = () => {
   const clearAll = () => {
     if (confirm('Clear current workspace and start new?')) {
       setState({ metadata: INITIAL_METADATA, entries: [createNewEntry()] });
+      setDriveFileId(null);
     }
   };
 
-  // ── Import ─────────────────────────────────────────────────────────────────
-
-  const processFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const xml = e.target?.result as string;
-      try {
-        const parsed = parseXML(xml);
-        setState({
-          ...parsed,
-          entries: parsed.entries.length ? parsed.entries : [createNewEntry()],
-        });
-        setImportSuccess(true);
-      } catch (err) {
-        console.error(err);
-        alert('Import failed.');
-      }
-    };
-    reader.readAsText(file);
+  // ── Local import ───────────────────────────────────────────────────────────
+  const loadXml = (xml: string) => {
+    const parsed = parseXML(xml);
+    setState({ ...parsed, entries: parsed.entries.length ? parsed.entries : [createNewEntry()] });
+    setImportSuccess(true);
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) processFile(file);
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try { loadXml(ev.target?.result as string); }
+      catch { alert('Import failed.'); }
+    };
+    reader.readAsText(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file?.name.endsWith('.xml')) processFile(file);
+    if (file?.name.endsWith('.xml')) {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try { loadXml(ev.target?.result as string); }
+        catch { alert('Import failed.'); }
+      };
+      reader.readAsText(file);
+    }
   };
-
-  // ── Derived values ─────────────────────────────────────────────────────────
-
-  const generatedXML   = useMemo(() => generateXML(state),                    [state]);
-  const exportFileName = useMemo(() => generateExportFilename(state.metadata), [state.metadata]);
 
   const downloadXML = () => {
     const blob = new Blob([generatedXML], { type: 'text/xml' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = exportFileName; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Drive helpers ──────────────────────────────────────────────────────────
+  const ensureToken = async (): Promise<string> => {
+    if (driveToken) return driveToken;
+    initTokenClient(DRIVE_CLIENT_ID);
+    const token = await requestToken();
+    setDriveToken(token);
+    return token;
+  };
+
+  const handleDriveError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'TOKEN_EXPIRED') {
+      setDriveToken(null);
+      setDriveError('Session expired — please reconnect.');
+    } else {
+      setDriveError(msg);
+    }
+  };
+
+  // ── Drive actions ──────────────────────────────────────────────────────────
+  const connectDrive = async () => {
+    try {
+      setDriveError(null);
+      await ensureToken();
+    } catch (err) { handleDriveError(err); }
+  };
+
+  const saveToDrive = async () => {
+    try {
+      setDriveSaving(true);
+      setDriveError(null);
+      const token  = await ensureToken();
+      const result = await driveSaveFile(token, exportFileName, generatedXML, driveFileId ?? undefined);
+      setDriveFileId(result.id);
+      setDriveSaved(true);
+    } catch (err) { handleDriveError(err); }
+    finally      { setDriveSaving(false); }
+  };
+
+  const openFromDrive = async () => {
+    try {
+      setDriveError(null);
+      setDriveLoading(true);
+      setDriveModal(true);
+      const token = await ensureToken();
+      setDriveFiles(await listXmlFiles(token));
+    } catch (err) {
+      handleDriveError(err);
+      setDriveModal(false);
+    } finally { setDriveLoading(false); }
+  };
+
+  const selectDriveFile = async (file: DriveFile) => {
+    try {
+      setDriveModal(false);
+      const xml = await driveDownloadFile(driveToken!, file.id);
+      loadXml(xml);
+      setDriveFileId(file.id);
+    } catch (err) { handleDriveError(err); }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div
       className={`flex h-screen overflow-hidden bg-slate-100 transition-colors ${isDragging ? 'bg-blue-50' : ''}`}
@@ -170,6 +261,7 @@ const App: React.FC = () => {
     >
       <input type="file" ref={fileInputRef} onChange={handleImport} accept=".xml" className="hidden" />
 
+      {/* ── Toasts ── */}
       {importSuccess && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-bounce">
           <i className="fa-solid fa-circle-check"></i>
@@ -177,6 +269,14 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {driveSaved && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
+          <i className="fa-brands fa-google-drive"></i>
+          <span className="text-xs font-black uppercase tracking-widest">Saved to Drive</span>
+        </div>
+      )}
+
+      {/* ── Drag overlay ── */}
       {isDragging && (
         <div className="fixed inset-0 z-50 bg-blue-600/20 backdrop-blur-sm border-4 border-dashed border-blue-500 flex items-center justify-center pointer-events-none">
           <div className="bg-white p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-4">
@@ -186,10 +286,20 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* ── Drive modal ── */}
+      {driveModal && (
+        <DriveModal
+          files={driveFiles}
+          loading={driveLoading}
+          onSelect={selectDriveFile}
+          onClose={() => setDriveModal(false)}
+        />
+      )}
+
       {/* ── Left panel: form ── */}
       <div className="flex-1 flex flex-col min-w-0 bg-white shadow-2xl">
-        <header className="p-4 border-b flex justify-between items-center bg-white z-10 shrink-0">
-          <div>
+        <header className="p-4 border-b flex justify-between items-center bg-white z-10 shrink-0 gap-4">
+          <div className="shrink-0">
             <h1 className="text-xl font-black tracking-tight text-slate-800 uppercase">
               TEI <span className="text-blue-600">Manuscript</span> Workspace
             </h1>
@@ -198,9 +308,62 @@ const App: React.FC = () => {
               Lancaster University • Isabel Klint
             </p>
           </div>
-          <div className="flex gap-4">
-            <button onClick={clearAll} className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase hover:text-red-500 transition-colors">Clear All</button>
-            <button onClick={() => fileInputRef.current?.click()} className="px-4 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase rounded-lg hover:bg-slate-200 transition-all">Open XML</button>
+
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button onClick={clearAll} className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase hover:text-red-500 transition-colors">
+              Clear All
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} className="px-4 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase rounded-lg hover:bg-slate-200 transition-all">
+              Open XML
+            </button>
+
+            {/* ── Drive controls (only shown when Client ID is configured) ── */}
+            {DRIVE_CLIENT_ID && (
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                {driveError && (
+                  <span
+                    className="text-[9px] text-red-400 font-bold max-w-[140px] truncate cursor-default"
+                    title={driveError}
+                  >
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>{driveError}
+                  </span>
+                )}
+
+                {driveToken ? (
+                  <>
+                    {/* Connected indicator */}
+                    <span className="text-[9px] font-bold text-emerald-500 flex items-center gap-1 shrink-0">
+                      <i className="fa-brands fa-google-drive"></i> Drive
+                    </span>
+
+                    <button
+                      onClick={openFromDrive}
+                      className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase rounded-lg hover:bg-slate-200 transition-all whitespace-nowrap"
+                    >
+                      Open from Drive
+                    </button>
+
+                    <button
+                      onClick={saveToDrive}
+                      disabled={driveSaving}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-500 transition-all flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {driveSaving
+                        ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving…</>
+                        : <><i className="fa-brands fa-google-drive"></i> {driveFileId ? 'Update Drive' : 'Save to Drive'}</>
+                      }
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={connectDrive}
+                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-lg hover:bg-slate-50 transition-all flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    <i className="fa-brands fa-google-drive text-blue-500"></i> Connect Drive
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </header>
 
@@ -252,6 +415,11 @@ const App: React.FC = () => {
               TEI P5 Real-time Preview
             </span>
             <span className="text-[9px] font-bold text-blue-400/60 mt-0.5 font-mono truncate">{exportFileName}</span>
+            {driveFileId && (
+              <span className="text-[9px] font-bold text-blue-400/40 mt-0.5 flex items-center gap-1">
+                <i className="fa-brands fa-google-drive"></i> synced to Drive
+              </span>
+            )}
           </div>
           <button onClick={downloadXML} className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-500 shadow-xl shadow-blue-900/40 transition-transform active:scale-95 whitespace-nowrap">
             Download XML
