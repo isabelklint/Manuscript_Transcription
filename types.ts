@@ -7,7 +7,7 @@ export interface NoteEntry {
 
 export interface VariantEntry {
   id: string;
-  usg: string; // e.g. v.l.
+  usg: string;
   orig: string;
   norm: string;
 }
@@ -26,6 +26,7 @@ export interface KirkSet {
   daughters: DaughterWord[];
 }
 
+// ── ARRONA 1796 ──────────────────────────────────────────
 export interface TranscriptionEntry {
   id: string;
   layout: 'col1' | 'col2' | 'across';
@@ -75,12 +76,59 @@ export interface TranscriptionState {
   entries: TranscriptionEntry[];
 }
 
+// ── CUADERNO 1827 ────────────────────────────────────────
+export interface PhraseEntry {
+  id: string;
+  line: string;
+  old_spa: string;
+  new_spa: string;
+  uncertain_spa: boolean;
+  old_maz: string;
+  new_maz: string;
+  uncertain_maz: boolean;
+  eng_gloss: string;
+  variant_maz?: string;       // e.g. "v.² tinDuquani"
+  variant_label?: string;     // e.g. "v.²"
+  abbreviation?: string;      // expan of any abbr in spa
+  notes: NoteEntry[];
+}
+
+export interface PhraseMetadata {
+  title_orig: string;
+  title_norm: string;
+  title_gloss: string;
+  author: string;
+  editor: string;
+  affiliation: string;
+  pub_date: string;
+  settlement: string;
+  institution: string;
+  repository: string;
+  shelfmark: string;
+  collection: string;
+  summary: string;
+  orig_date: string;
+  orig_place: string;
+  pb_n: string;
+  image_source: string;
+  phys_extent: string;
+  hand_note: string;
+  project_desc: string;
+  filename_keyword: string;
+}
+
+export interface PhraseState {
+  metadata: PhraseMetadata;
+  entries: PhraseEntry[];
+}
+
+// ── SHARED ───────────────────────────────────────────────
 export const NOTE_TYPES = [
-  { id: 'editorial', desc: 'Editorial' },
-  { id: 'linguistic', desc: 'Linguistic' },
-  { id: 'layout', desc: 'Layout' },
+  { id: 'editorial',    desc: 'Editorial' },
+  { id: 'linguistic',   desc: 'Linguistic' },
+  { id: 'layout',       desc: 'Layout' },
   { id: 'orthographic', desc: 'Orthographic' },
-  { id: 'historical', desc: 'Historical' },
-  { id: 'semantic', desc: 'Semantic' },
-  { id: 'none', desc: 'None (Remove Note)' },
+  { id: 'historical',   desc: 'Historical' },
+  { id: 'semantic',     desc: 'Semantic' },
+  { id: 'none',         desc: 'None (Remove Note)' },
 ];
