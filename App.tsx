@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Metadata, TranscriptionEntry, TranscriptionState, NOTE_TYPES, KirkSet, DaughterWord } from './types';
-import { generateId } from './utils';
+import { generateId, escapeXml } from './utils';
 import MetadataForm from './components/MetadataForm';
 import EntryItem from './components/EntryItem';
 import XMLPreview from './components/XMLPreview';
@@ -145,46 +145,48 @@ const App: React.FC = () => {
 
     const renderEntry = (e: TranscriptionEntry) => {
       const entryIdx = entries.indexOf(e) + 1;
-      const eid = `p1e${entryIdx.toString().padStart(3, '0')}`;
+      const pageId = `p${metadata.pb_n}`;
+      const eid = `${pageId}e${entryIdx.toString().padStart(3, '0')}`;
       let xml = `          <entry xml:id="${eid}">\n`;
       xml += `            <form type="lemma">\n`;
-      xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${e.old_maz}</orth>\n`;
-      xml += `              <orth type="norm" xml:lang="maz">${e.new_maz}</orth>\n`;
-      if (e.ipa) xml += `              <pron notation="ipa">${e.ipa}</pron>\n`;
+      xml += `              <orth type="orig" xml:lang="maz"${cert(e.uncertain_maz)}>${escapeXml(e.old_maz)}</orth>\n`;
+      xml += `              <orth type="norm" xml:lang="maz">${escapeXml(e.new_maz)}</orth>\n`;
+      if (e.ipa) xml += `              <pron notation="ipa">${escapeXml(e.ipa)}</pron>\n`;
       xml += `            </form>\n`;
 
       if (e.variant) {
         xml += `            <form type="variant">\n`;
-        xml += `              <usg type="textual" xml:lang="lat">${e.variant.usg}</usg>\n`;
-        xml += `              <orth type="orig" xml:lang="maz">${e.variant.orig}</orth>\n`;
-        xml += `              <orth type="norm" xml:lang="maz">${e.variant.norm}</orth>\n`;
+        xml += `              <usg type="textual" xml:lang="lat">${escapeXml(e.variant.usg)}</usg>\n`;
+        xml += `              <orth type="orig" xml:lang="maz">${escapeXml(e.variant.orig)}</orth>\n`;
+        xml += `              <orth type="norm" xml:lang="maz">${escapeXml(e.variant.norm)}</orth>\n`;
         xml += `            </form>\n`;
       }
 
       xml += `            <sense>\n`;
+      // old_spa is not escaped: users hand-enter abbreviation XML (<choice><abbr>…</abbr></choice>) here.
       xml += `              <def type="orig" xml:lang="spa"${cert(e.uncertain_spa)}>${e.old_spa}</def>\n`;
-      xml += `              <def type="norm" xml:lang="spa">${e.new_spa}</def>\n`;
-      xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${e.eng_gloss}</def>\n`;
+      xml += `              <def type="norm" xml:lang="spa">${escapeXml(e.new_spa)}</def>\n`;
+      xml += `              <def type="gloss" xml:lang="eng"${cert(e.uncertain_eng)}>${escapeXml(e.eng_gloss)}</def>\n`;
       xml += `            </sense>\n`;
-      
+
       e.kirk_sets.forEach(ks => {
-        xml += `            <note type="kirk" n="${ks.number}" target="${ks.page}">\n`;
-        xml += `              <hi type="proto">${ks.protoForm}</hi>\n`;
+        xml += `            <note type="kirk" n="${escapeXml(ks.number)}" target="${escapeXml(ks.page)}">\n`;
+        xml += `              <hi type="proto">${escapeXml(ks.protoForm)}</hi>\n`;
         xml += `              <list type="daughters">\n`;
         ks.daughters.forEach(d => {
           const matchAttr = d.matches ? ' cert="high"' : ' cert="low"';
-          xml += `                <item${matchAttr}>${d.text}</item>\n`;
+          xml += `                <item${matchAttr}>${escapeXml(d.text)}</item>\n`;
         });
         xml += `              </list>\n`;
         xml += `            </note>\n`;
       });
 
       e.notes.forEach(n => {
-        const typeAttr = n.type && n.type !== 'none' ? ` type="${n.type}"` : '';
-        xml += `            <note${typeAttr} resp="#${n.resp}">${n.text}</note>\n`;
+        const typeAttr = n.type && n.type !== 'none' ? ` type="${escapeXml(n.type)}"` : '';
+        xml += `            <note${typeAttr} resp="#${escapeXml(n.resp)}">${escapeXml(n.text)}</note>\n`;
       });
-      
-      xml += `            <lb n="${e.line}"/>\n`;
+
+      xml += `            <lb n="${escapeXml(e.line)}"/>\n`;
       xml += `          </entry>\n`;
       return xml;
     };
@@ -195,57 +197,58 @@ const App: React.FC = () => {
       return `        <div type="column" n="${n}">\n${filtered.map(renderEntry).join('\n')}\n        </div>`;
     };
 
+    const ex = escapeXml;
     return `<?xml version="1.0" encoding="UTF-8"?>
 <?xml-model href="http://www.tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
     <fileDesc>
       <titleStmt>
-        <title>${metadata.title_orig}</title>
-        <author><persName>${metadata.author}</persName></author>
-        <editor><persName>${metadata.editor}</persName><affiliation>${metadata.affiliation}</affiliation></editor>
+        <title>${ex(metadata.title_orig)}</title>
+        <author><persName>${ex(metadata.author)}</persName></author>
+        <editor><persName>${ex(metadata.editor)}</persName><affiliation>${ex(metadata.affiliation)}</affiliation></editor>
       </titleStmt>
       <editionStmt>
-        <edition>First TEI P5 digital edition, <date when="${metadata.pub_date}">${metadata.pub_date}</date></edition>
+        <edition>First TEI P5 digital edition, <date when="${ex(metadata.pub_date)}">${ex(metadata.pub_date)}</date></edition>
       </editionStmt>
       <publicationStmt>
-        <publisher>${metadata.editor}</publisher>
+        <publisher>${ex(metadata.editor)}</publisher>
         <availability><p>For academic use.</p></availability>
       </publicationStmt>
       <sourceDesc>
         <msDesc>
           <msIdentifier>
-            <settlement>${metadata.settlement}</settlement>
-            <institution>${metadata.institution}</institution>
-            <repository>${metadata.repository}</repository>
-            <idno type="shelfmark">${metadata.shelfmark}</idno>
-            <altIdentifier type="collection"><idno>${metadata.collection}</idno></altIdentifier>
+            <settlement>${ex(metadata.settlement)}</settlement>
+            <institution>${ex(metadata.institution)}</institution>
+            <repository>${ex(metadata.repository)}</repository>
+            <idno type="shelfmark">${ex(metadata.shelfmark)}</idno>
+            <altIdentifier type="collection"><idno>${ex(metadata.collection)}</idno></altIdentifier>
           </msIdentifier>
           <msContents>
-            <msItem><title>${metadata.title_orig}</title><note>${metadata.title_note}</note></msItem>
-            <summary>${metadata.summary}</summary>
+            <msItem><title>${ex(metadata.title_orig)}</title><note>${ex(metadata.title_note)}</note></msItem>
+            <summary>${ex(metadata.summary)}</summary>
             <textLang mainLang="maz" otherLangs="spa lat eng">maz</textLang>
           </msContents>
           <physDesc>
-            <objectDesc form="codex"><supportDesc><extent>${metadata.phys_extent}</extent></supportDesc><layoutDesc><layout columns="2">${metadata.phys_layout}</layout></layoutDesc></objectDesc>
-            <handDesc><handNote>${metadata.hand_note}</handNote></handDesc>
+            <objectDesc form="codex"><supportDesc><extent>${ex(metadata.phys_extent)}</extent></supportDesc><layoutDesc><layout columns="2">${ex(metadata.phys_layout)}</layout></layoutDesc></objectDesc>
+            <handDesc><handNote>${ex(metadata.hand_note)}</handNote></handDesc>
           </physDesc>
-          <history><origin><origDate>begun ${metadata.orig_date}</origDate><origPlace>${metadata.orig_place}</origPlace></origin></history>
+          <history><origin><origDate>begun ${ex(metadata.orig_date)}</origDate><origPlace>${ex(metadata.orig_place)}</origPlace></origin></history>
         </msDesc>
       </sourceDesc>
     </fileDesc>
     <encodingDesc>
-      <projectDesc><p>${metadata.project_desc}</p></projectDesc>
+      <projectDesc><p>${ex(metadata.project_desc)}</p></projectDesc>
     </encodingDesc>
   </teiHeader>
   <text>
     <body>
       <div type="vocabulary">
-        <pb n="${metadata.pb_n}" facs="${metadata.image_source}"/>
+        <pb n="${ex(metadata.pb_n)}" facs="${ex(metadata.image_source)}"/>
         <head>
-          <title type="orig" xml:lang="spa">${metadata.title_orig}</title>
-          <title type="norm" xml:lang="spa">${metadata.title_norm}</title>
-          <title type="gloss" xml:lang="eng">${metadata.title_gloss}</title>
+          <title type="orig" xml:lang="spa">${ex(metadata.title_orig)}</title>
+          <title type="norm" xml:lang="spa">${ex(metadata.title_norm)}</title>
+          <title type="gloss" xml:lang="eng">${ex(metadata.title_gloss)}</title>
         </head>
 ${entries.filter(e => e.layout === 'across').map(renderEntry).join('\n')}
         <!-- COLUMN 1 -->
@@ -354,7 +357,7 @@ ${renderColumn('col2', '2')}
           pb_n: xml.match(/<pb n="(.*?)"/i)?.[1] || INITIAL_METADATA.pb_n,
           image_source: xml.match(/facs="(.*?)"/i)?.[1] || INITIAL_METADATA.image_source,
           phys_extent: xml.match(/<extent>(.*?)<\/extent>/i)?.[1] || INITIAL_METADATA.phys_extent,
-          phys_layout: xml.match(/<layout.*?> (.*?)<\/layout>/i)?.[1] || INITIAL_METADATA.phys_layout,
+          phys_layout: xml.match(/<layout[^>]*>(.*?)<\/layout>/i)?.[1] || INITIAL_METADATA.phys_layout,
           hand_note: xml.match(/<handNote>(.*?)<\/handNote>/i)?.[1] || INITIAL_METADATA.hand_note,
           project_desc: xml.match(/<projectDesc><p>(.*?)<\/p>/i)?.[1] || INITIAL_METADATA.project_desc,
           filename_keyword: INITIAL_METADATA.filename_keyword
