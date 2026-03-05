@@ -84,3 +84,48 @@ export const NOTE_TYPES = [
   { id: 'semantic', desc: 'Semantic' },
   { id: 'none', desc: 'None (Remove Note)' },
 ];
+
+export interface PhraseEntry {
+  id: string;
+  line: string;
+  old_spa: string;
+  new_spa: string;
+  uncertain_spa: boolean;
+  old_maz: string;
+  new_maz: string;
+  uncertain_maz: boolean;
+  eng_gloss: string;
+  notes: NoteEntry[];
+  variant_maz?: string;
+  variant_label?: string;
+  abbreviation?: string;
+}
+
+export interface PhraseMetadata {
+  title_orig: string;
+  title_norm: string;
+  title_gloss: string;
+  author: string;
+  editor: string;
+  affiliation: string;
+  pub_date: string;
+  settlement: string;
+  institution: string;
+  repository: string;
+  shelfmark: string;
+  collection: string;
+  summary: string;
+  orig_date: string;
+  orig_place: string;
+  pb_n: string;
+  image_source: string;
+  phys_extent: string;
+  hand_note: string;
+  project_desc: string;
+  filename_keyword: string;
+}
+
+export interface PhraseState {
+  metadata: PhraseMetadata;
+  entries: PhraseEntry[];
+}
