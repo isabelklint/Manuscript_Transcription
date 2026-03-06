@@ -160,10 +160,19 @@ const EntryItem: React.FC<Props> = ({ entry, index, onUpdate, onRemove, onDuplic
                     </div>
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase">Variant Orig</label>
-                      <input 
-                        type="text" 
-                        value={entry.variant.orig} 
+                      <input
+                        type="text"
+                        value={entry.variant.orig}
                         onChange={e => onUpdate({ variant: { ...entry.variant!, orig: e.target.value } })}
+                        className="w-full text-xs px-2 py-1 bg-white border border-amber-200 rounded focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-slate-400 uppercase">Variant Norm</label>
+                      <input
+                        type="text"
+                        value={entry.variant.norm}
+                        onChange={e => onUpdate({ variant: { ...entry.variant!, norm: e.target.value } })}
                         className="w-full text-xs px-2 py-1 bg-white border border-amber-200 rounded focus:outline-none"
                       />
                     </div>

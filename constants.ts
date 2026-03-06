@@ -1,0 +1,27 @@
+import { Metadata } from './types';
+
+export const INITIAL_METADATA: Metadata = {
+  title_orig: 'Vocabulario en Ydioma Mazateco',
+  title_norm: 'Cuaderno de idioma mazateco comenzado en el año de 1796',
+  title_gloss: 'Booklet of Mazatec language begun in the year 1796',
+  title_note: 'comenzado en el año de 1796',
+  author: 'Ygnacio Arrona',
+  editor: 'Isabel Klint',
+  affiliation: 'Lancaster University / ILV A.C.',
+  pub_date: '2026-01',
+  settlement: 'Charlottesville',
+  institution: 'University of Virginia',
+  repository: 'Special Collections',
+  shelfmark: 'UVA MSS 01784',
+  collection: 'Gates Collection, 941 Manuscript',
+  summary: 'Bilingual Mazatec-Spanish vocabulary list, compiled for missionary or linguistic purposes.',
+  orig_date: '1796',
+  orig_place: 'Oaxaca, Mexico',
+  pb_n: '1',
+  image_source: '000032278_0001.jpg',
+  phys_extent: '18 pages, 4to',
+  phys_layout: 'Double column',
+  hand_note: 'Single hand, late 18th century',
+  project_desc: 'Transcription prepared for Lancaster University PGCERT in Corpus Linguistics.',
+  filename_keyword: 'vocabulario',
+};
