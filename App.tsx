@@ -9,6 +9,7 @@ import {
   initTokenClient,
   requestToken,
   listXmlFiles,
+  ensureFolder,
   saveFile as driveSaveFile,
   downloadFile as driveDownloadFile,
 } from './driveClient';
@@ -77,20 +78,25 @@ const App: React.FC = () => {
   const [importSuccess, setImportSuccess] = useState(false);
 
   // ── Drive state ────────────────────────────────────────────────────────────
-  const [driveToken,   setDriveToken]   = useState<string | null>(null);
-  const [driveFileId,  setDriveFileId]  = useState<string | null>(null); // current open Drive file
-  const [driveSaving,  setDriveSaving]  = useState(false);
-  const [driveSaved,   setDriveSaved]   = useState(false);
-  const [driveModal,   setDriveModal]   = useState(false);
-  const [driveFiles,   setDriveFiles]   = useState<DriveFile[]>([]);
-  const [driveLoading, setDriveLoading] = useState(false);
-  const [driveError,   setDriveError]   = useState<string | null>(null);
+  const [driveToken,      setDriveToken]      = useState<string | null>(null);
+  const [driveFileId,     setDriveFileId]     = useState<string | null>(null); // current open Drive file
+  const [driveSaving,     setDriveSaving]     = useState(false);
+  const [driveSaved,      setDriveSaved]      = useState(false);
+  const [driveModal,      setDriveModal]      = useState(false);
+  const [driveFiles,      setDriveFiles]      = useState<DriveFile[]>([]);
+  const [driveLoading,    setDriveLoading]    = useState(false);
+  const [driveError,      setDriveError]      = useState<string | null>(null);
+  const [driveFolderName, setDriveFolderName] = useState<string>(() => localStorage.getItem('drive_folder_name') ?? '');
 
   // ── Persistence ────────────────────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem('tei_p5_v8_state', JSON.stringify(state)); }
     catch (e) { console.error('Failed to save state:', e); }
   }, [state]);
+
+  useEffect(() => {
+    localStorage.setItem('drive_folder_name', driveFolderName);
+  }, [driveFolderName]);
 
   useEffect(() => {
     if (!importSuccess) return;
@@ -221,8 +227,11 @@ const App: React.FC = () => {
     try {
       setDriveSaving(true);
       setDriveError(null);
-      const token  = await ensureToken();
-      const result = await driveSaveFile(token, exportFileName, generatedXML, driveFileId ?? undefined);
+      const token    = await ensureToken();
+      const folderId = (!driveFileId && driveFolderName.trim())
+        ? await ensureFolder(token, driveFolderName.trim())
+        : undefined;
+      const result = await driveSaveFile(token, exportFileName, generatedXML, driveFileId ?? undefined, folderId);
       setDriveFileId(result.id);
       setDriveSaved(true);
     } catch (err) { handleDriveError(err); }
@@ -335,6 +344,19 @@ const App: React.FC = () => {
                     <span className="text-[9px] font-bold text-emerald-500 flex items-center gap-1 shrink-0">
                       <i className="fa-brands fa-google-drive"></i> Drive
                     </span>
+
+                    {/* Folder input */}
+                    <div className="flex items-center gap-1">
+                      <i className="fa-solid fa-folder text-[9px] text-slate-400"></i>
+                      <input
+                        type="text"
+                        value={driveFolderName}
+                        onChange={e => setDriveFolderName(e.target.value)}
+                        placeholder="Drive root"
+                        title="Folder name — created automatically if it doesn't exist"
+                        className="text-[9px] font-mono bg-slate-100 border border-slate-200 rounded px-2 py-1 w-24 focus:outline-none focus:border-blue-400 text-slate-600 placeholder:text-slate-300"
+                      />
+                    </div>
 
                     <button
                       onClick={openFromDrive}

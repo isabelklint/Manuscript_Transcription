@@ -68,13 +68,37 @@ export const listXmlFiles = async (token: string): Promise<DriveFile[]> => {
   return data.files ?? [];
 };
 
+export const ensureFolder = async (token: string, folderName: string): Promise<string> => {
+  const params = new URLSearchParams({
+    q: `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`,
+    fields: 'files(id)',
+    spaces: 'drive',
+  });
+  const searchRes = await authedFetch(token, `${DRIVE_API}/files?${params}`);
+  await checkResponse(searchRes, 'Search folder');
+  const data = await searchRes.json();
+  if (data.files?.length > 0) return data.files[0].id;
+
+  const createRes = await authedFetch(token, `${DRIVE_API}/files`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' }),
+  });
+  await checkResponse(createRes, 'Create folder');
+  const folder = await createRes.json();
+  return folder.id;
+};
+
 export const saveFile = async (
   token: string,
   name: string,
   xml: string,
   fileId?: string,
+  folderId?: string,
 ): Promise<{ id: string; name: string }> => {
-  const meta = JSON.stringify({ name, mimeType: 'text/xml' });
+  const metaObj: Record<string, unknown> = { name, mimeType: 'text/xml' };
+  if (!fileId && folderId) metaObj.parents = [folderId];
+  const meta = JSON.stringify(metaObj);
   const body = new FormData();
   body.append('metadata', new Blob([meta], { type: 'application/json' }));
   body.append('file',     new Blob([xml],  { type: 'text/xml' }));
