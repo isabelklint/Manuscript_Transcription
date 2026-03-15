@@ -56,9 +56,12 @@ const checkResponse = async (res: Response, context: string): Promise<Response> 
   return res;
 };
 
-export const listXmlFiles = async (token: string): Promise<DriveFile[]> => {
+export const listXmlFiles = async (token: string, folderId?: string): Promise<DriveFile[]> => {
+  const q = folderId
+    ? `mimeType='text/xml' and trashed=false and '${folderId}' in parents`
+    : "mimeType='text/xml' and trashed=false";
   const params = new URLSearchParams({
-    q: "mimeType='text/xml' and trashed=false",
+    q,
     orderBy: 'modifiedTime desc',
     fields: 'files(id,name,modifiedTime)',
     spaces: 'drive',

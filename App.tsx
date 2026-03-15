@@ -244,7 +244,8 @@ const App: React.FC = () => {
       setDriveLoading(true);
       setDriveModal(true);
       const token = await ensureToken();
-      setDriveFiles(await listXmlFiles(token));
+      const folderId = driveFolderName.trim() ? await ensureFolder(token, driveFolderName.trim()) : undefined;
+      setDriveFiles(await listXmlFiles(token, folderId));
     } catch (err) {
       handleDriveError(err);
       setDriveModal(false);
