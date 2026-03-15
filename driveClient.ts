@@ -25,6 +25,7 @@ type TokenClient = ReturnType<typeof google.accounts.oauth2.initTokenClient>;
 let tokenClient: TokenClient | null = null;
 
 export const initTokenClient = (clientId: string): void => {
+  console.info('[Drive] Initialising OAuth client. Ensure this origin is listed in your GCP Authorised JavaScript Origins:', window.location.origin);
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
