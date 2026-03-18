@@ -9,6 +9,7 @@ Requirements:
 """
 
 import os
+import random
 import re
 import sys
 import time
@@ -16,7 +17,6 @@ import time
 try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
     from selenium.common.exceptions import WebDriverException, NoSuchWindowException
 except ImportError:
@@ -27,11 +27,18 @@ HTID = "hvd.32044043284892"
 TOTAL_PAGES = 162
 OUTPUT_FILE = "hvd.32044043284892_full_text.txt"
 TEXT_URL = "https://babel.hathitrust.org/cgi/imgsrv/download/plaintext"
+VIEWER_URL = f"https://babel.hathitrust.org/cgi/pt?id={HTID}"
+
+# Seconds between pages (random in this range)
+DELAY_MIN = 8
+DELAY_MAX = 15
+
+# After this many pages, visit the viewer page to reset session state
+RESET_EVERY = 10
 
 
 def make_driver():
     opts = Options()
-    # Run visible so Cloudflare challenge can complete
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
@@ -57,23 +64,42 @@ def wait_for_cloudflare(driver, url, timeout=30):
     return False
 
 
-def get_page_text(driver, seq):
-    url = (
-        f"{TEXT_URL}?id={HTID}&attachment=1&tracker=D2&seq={seq}"
+def is_rate_limited(driver, body):
+    """Return True if the current page is a 429 rate-limit error."""
+    body_lower = body.lower()
+    return (
+        "429" in driver.title
+        or "error: 429" in body_lower
+        or ("try again later" in body_lower and "application error" in body_lower)
     )
+
+
+def reset_session(driver, seq):
+    """Navigate to the viewer to let HathiTrust 'cool down', then come back."""
+    viewer = f"{VIEWER_URL}&seq={seq}"
+    wait_for_cloudflare(driver, viewer, timeout=30)
+    time.sleep(random.uniform(3, 6))
+
+
+def get_page_text(driver, seq):
+    url = f"{TEXT_URL}?id={HTID}&attachment=1&tracker=D2&seq={seq}"
     if not wait_for_cloudflare(driver, url, timeout=20):
-        return None  # Stuck on challenge
+        return None  # Stuck on Cloudflare
 
     body = driver.find_element(By.TAG_NAME, "body").text.strip()
 
-    # If we got an HTML error page instead of text
+    if is_rate_limited(driver, body):
+        return "RATE_LIMITED"
+
+    # HTML error page or empty
     if "<html" in body.lower() or len(body) < 2:
         return ""
+
     return body
 
 
 def load_already_extracted(output_file):
-    """Read which pages have already been saved to the output file."""
+    """Return the set of page numbers already saved to the output file."""
     done = set()
     if not os.path.exists(output_file):
         return done
@@ -86,20 +112,16 @@ def load_already_extracted(output_file):
 
 
 def restart_driver(driver):
-    """Quit the crashed driver (best-effort) and return a fresh one."""
+    """Quit the crashed driver and return a fresh one with Cloudflare cleared."""
     try:
         driver.quit()
     except Exception:
         pass
-    time.sleep(2)
+    time.sleep(3)
     new_driver = make_driver()
     print("\nChrome restarted. Re-passing Cloudflare...")
-    wait_for_cloudflare(
-        new_driver,
-        f"https://babel.hathitrust.org/cgi/pt?id={HTID}&seq=1",
-        timeout=30,
-    )
-    print("Cloudflare passed. Resuming extraction...\n")
+    wait_for_cloudflare(new_driver, f"{VIEWER_URL}&seq=1", timeout=30)
+    print("Cloudflare passed. Resuming...\n")
     return new_driver
 
 
@@ -115,7 +137,6 @@ def main():
     if already_done:
         print(f"\nResuming — {len(already_done)} pages already saved.")
     else:
-        # Write file header
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             f.write("HathiTrust Book Extraction\n")
             f.write(f"Book ID : {HTID}\n")
@@ -131,43 +152,62 @@ def main():
     driver = make_driver()
 
     print("Passing Cloudflare check...")
-    wait_for_cloudflare(
-        driver,
-        f"https://babel.hathitrust.org/cgi/pt?id={HTID}&seq=1",
-        timeout=30,
-    )
+    wait_for_cloudflare(driver, f"{VIEWER_URL}&seq=1", timeout=30)
     print("Cloudflare passed. Starting extraction...\n")
 
     extracted = 0
     failed_pages = []
+    pages_since_reset = 0
 
     try:
         for seq in range(1, TOTAL_PAGES + 1):
             if seq in already_done:
                 continue
 
-            print(f"\rPage {seq}/{TOTAL_PAGES} — {extracted} new this run", end="", flush=True)
+            total_done = len(already_done) + extracted
+            print(f"\rPage {seq}/{TOTAL_PAGES} — {total_done} saved total", end="", flush=True)
 
-            retries = 0
-            while retries <= 2:
+            # Periodically visit the viewer to reset session state
+            if pages_since_reset >= RESET_EVERY:
+                reset_session(driver, seq)
+                pages_since_reset = 0
+
+            # Fetch with rate-limit backoff
+            backoff = 120  # start with 2 min on first 429
+            gave_up = False
+            for attempt in range(5):
                 try:
                     result = get_page_text(driver, seq)
-                    break
                 except (NoSuchWindowException, WebDriverException) as e:
-                    if retries == 2:
+                    if attempt == 4:
                         print(f"\nChrome unrecoverable at page {seq}: {e}")
                         raise
-                    print(f"\nChrome crashed at page {seq}, restarting (attempt {retries+1})...")
+                    print(f"\nChrome crashed, restarting...")
                     driver = restart_driver(driver)
-                    retries += 1
+                    continue
 
-            if result is None:
+                if result != "RATE_LIMITED":
+                    break
+
+                print(f"\nRate limited at page {seq}. Navigating away, waiting {backoff}s...")
+                # Navigate to viewer (not the download URL) to reset the session
+                reset_session(driver, seq)
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 600)
+            else:
+                print(f"\nGave up on page {seq} after repeated rate limiting.")
+                failed_pages.append(seq)
+                gave_up = True
+                result = ""
+
+            if gave_up:
+                pass
+            elif result is None:
                 print(f"\nStuck on Cloudflare at page {seq}. Stopping.")
                 break
             elif result == "":
                 failed_pages.append(seq)
             else:
-                # Append immediately so progress is never lost
                 with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
                     f.write(f"\n{'─' * 40}\n")
                     f.write(f"[ Page {seq} ]\n")
@@ -175,8 +215,10 @@ def main():
                     f.write(result)
                     f.write("\n")
                 extracted += 1
+                pages_since_reset += 1
 
-            time.sleep(0.5)
+            delay = random.uniform(DELAY_MIN, DELAY_MAX)
+            time.sleep(delay)
 
     finally:
         try:
@@ -185,7 +227,7 @@ def main():
             pass
 
     total_done = len(already_done) + extracted
-    print(f"\n\nDone. {extracted} new pages extracted ({total_done} total).")
+    print(f"\n\nDone. {extracted} new pages extracted ({total_done} total saved).")
     if failed_pages:
         print(f"Empty/failed pages ({len(failed_pages)}): {failed_pages[:30]}"
               f"{'...' if len(failed_pages) > 30 else ''}")
