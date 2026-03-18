@@ -82,9 +82,15 @@ def reset_session(driver, seq):
 
 
 def get_page_text(driver, seq):
-    url = f"{TEXT_URL}?id={HTID}&attachment=1&tracker=D2&seq={seq}"
+    # attachment=0 renders text inline; attachment=1 triggers a file download
+    # which Chrome handles silently and Selenium ends up reading the wrong page.
+    url = f"{TEXT_URL}?id={HTID}&attachment=0&seq={seq}"
     if not wait_for_cloudflare(driver, url, timeout=20):
         return None  # Stuck on Cloudflare
+
+    # If we were redirected to the viewer (no text for this page), skip it.
+    if "/cgi/pt" in driver.current_url:
+        return ""
 
     body = driver.find_element(By.TAG_NAME, "body").text.strip()
 
