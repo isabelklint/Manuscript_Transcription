@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
 HathiTrust Book Text Extractor
-Extracts OCR text from a HathiTrust book using the plaintext download endpoint.
-
-Usage:
-    python3 extract_hathitrust.py
+Uses Chrome via Selenium to bypass Cloudflare and download OCR text.
 
 Requirements:
-    pip install requests
+    pip install selenium
+    ChromeDriver must be installed (already present)
 """
 
 import os
@@ -15,92 +13,110 @@ import sys
 import time
 
 try:
-    import requests
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.common.exceptions import WebDriverException
 except ImportError:
-    print("Please install requests: pip install requests")
+    print("Please install selenium: pip install selenium")
     sys.exit(1)
 
 HTID = "hvd.32044043284892"
 TOTAL_PAGES = 162
 OUTPUT_FILE = "hvd.32044043284892_full_text.txt"
-
 TEXT_URL = "https://babel.hathitrust.org/cgi/imgsrv/download/plaintext"
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
-        "(KHTML, like Gecko) Version/26.3 Safari/605.1.15"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": f"https://babel.hathitrust.org/cgi/pt?id={HTID}&seq=1",
-}
 
-session = requests.Session()
-session.headers.update(HEADERS)
+def make_driver():
+    opts = Options()
+    # Run visible so Cloudflare challenge can complete
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
+    opts.add_argument("--window-size=1200,800")
+    driver = webdriver.Chrome(options=opts)
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
+    return driver
 
 
-def get_page_text(seq):
-    """Download plain text for a single page."""
-    params = {
-        "id": HTID,
-        "attachment": "1",
-        "tracker": "D2",
-        "seq": seq,
-    }
-    try:
-        resp = session.get(TEXT_URL, params=params, timeout=30)
+def wait_for_cloudflare(driver, url, timeout=30):
+    """Load URL and wait until Cloudflare challenge clears."""
+    driver.get(url)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        title = driver.title
+        if "Just a moment" in title or "Attention Required" in title:
+            time.sleep(1)
+            continue
+        return True
+    print(f"\nCloudflare challenge did not clear for: {url}")
+    return False
 
-        if resp.status_code == 403:
-            return None  # Access denied
-        if resp.status_code in (404, 400):
-            return False  # Page doesn't exist
 
-        resp.raise_for_status()
-        text = resp.text.strip()
-        return text if text else ""
+def get_page_text(driver, seq):
+    url = (
+        f"{TEXT_URL}?id={HTID}&attachment=1&tracker=D2&seq={seq}"
+    )
+    if not wait_for_cloudflare(driver, url, timeout=20):
+        return None  # Stuck on challenge
 
-    except requests.exceptions.Timeout:
-        print(f"\n  Page {seq}: Timeout, retrying...")
-        time.sleep(3)
-        return get_page_text(seq)
-    except Exception as e:
-        print(f"\n  Page {seq}: Error — {e}")
+    body = driver.find_element(By.TAG_NAME, "body").text.strip()
+
+    # If we got an HTML error page instead of text
+    if "<html" in body.lower() or len(body) < 2:
         return ""
+    return body
 
 
 def main():
     print("=" * 60)
-    print("HathiTrust Book Text Extractor")
-    print(f"Book ID  : {HTID}")
-    print(f"Pages    : {TOTAL_PAGES}")
-    print(f"Output   : {OUTPUT_FILE}")
+    print("HathiTrust Book Text Extractor (Selenium)")
+    print(f"Book ID : {HTID}")
+    print(f"Pages   : {TOTAL_PAGES}")
+    print(f"Output  : {OUTPUT_FILE}")
     print("=" * 60)
-    print()
+    print("\nOpening Chrome — a browser window will appear.")
+    print("Do not close it while the script runs.\n")
+
+    driver = make_driver()
+
+    # First visit to pass Cloudflare on the main domain
+    print("Passing Cloudflare check...")
+    wait_for_cloudflare(
+        driver,
+        f"https://babel.hathitrust.org/cgi/pt?id={HTID}&seq=1",
+        timeout=30,
+    )
+    print("Cloudflare passed. Starting extraction...\n")
 
     pages_text = []
     failed_pages = []
 
-    for seq in range(1, TOTAL_PAGES + 1):
-        print(f"\rPage {seq}/{TOTAL_PAGES} — {len(pages_text)} extracted", end="", flush=True)
+    try:
+        for seq in range(1, TOTAL_PAGES + 1):
+            print(f"\rPage {seq}/{TOTAL_PAGES} — {len(pages_text)} extracted", end="", flush=True)
 
-        result = get_page_text(seq)
+            result = get_page_text(driver, seq)
 
-        if result is None:
-            print(f"\n\nAccess denied at page {seq}. Stopping.")
-            break
-        elif result is False:
-            print(f"\nPage {seq} not found — stopping.")
-            break
-        elif result == "":
-            failed_pages.append(seq)
-        else:
-            pages_text.append((seq, result))
+            if result is None:
+                print(f"\nStuck on Cloudflare at page {seq}. Stopping.")
+                break
+            elif result == "":
+                failed_pages.append(seq)
+            else:
+                pages_text.append((seq, result))
 
-        time.sleep(0.4)  # Be polite
+            time.sleep(0.5)
+
+    finally:
+        driver.quit()
 
     print(f"\n\nDone. Extracted text from {len(pages_text)} pages.")
     if failed_pages:
-        print(f"Empty pages ({len(failed_pages)}): {failed_pages[:30]}"
+        print(f"Empty/failed pages ({len(failed_pages)}): {failed_pages[:30]}"
               f"{'...' if len(failed_pages) > 30 else ''}")
 
     if not pages_text:
@@ -111,8 +127,10 @@ def main():
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write("HathiTrust Book Extraction\n")
         f.write(f"Book ID : {HTID}\n")
-        f.write(f"Title   : Catálogo etimológico de los nombres de los pueblos, "
-                f"haciendas y ranchos del estado de Oaxaca\n")
+        f.write(
+            "Title   : Catálogo etimológico de los nombres de los pueblos, "
+            "haciendas y ranchos del estado de Oaxaca\n"
+        )
         f.write(f"Pages   : {len(pages_text)} extracted\n")
         f.write("=" * 80 + "\n\n")
 
