@@ -11,10 +11,23 @@ Requirements:
 
 Book: hvd.32044043284892
 URL: https://babel.hathitrust.org/cgi/pt?id=hvd.32044043284892&seq=7
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW TO GET YOUR BROWSER COOKIES (if you get 403 errors):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in to https://www.hathitrust.org in your browser
+2. Navigate to the book: https://babel.hathitrust.org/cgi/pt?id=hvd.32044043284892&seq=7
+3. Open DevTools (F12 or Cmd+Option+I)
+4. Go to Network tab, refresh the page
+5. Click any request to babel.hathitrust.org
+6. Find "Cookie:" in the Request Headers
+7. Copy the entire cookie value and paste it into COOKIE_STRING below
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import json
 import os
+import re
 import sys
 import time
 
@@ -32,19 +45,29 @@ except ImportError:
     print("Note: beautifulsoup4 not installed. Install with: pip install beautifulsoup4")
     print("Continuing without HTML parsing...\n")
 
+# ─── CONFIGURATION ────────────────────────────────────────────────────────────
+
 HTID = "hvd.32044043284892"
 START_SEQ = 1
 OUTPUT_FILE = "hvd.32044043284892_full_text.txt"
 
+# Paste your browser cookie string here if you get 403 errors.
+# Example: COOKIE_STRING = "shibsession_xxx=yyy; _shibstate_xxx=zzz"
+COOKIE_STRING = ""
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 # HathiTrust endpoints
 CATALOG_URL = f"https://catalog.hathitrust.org/api/volumes/brief/htid/{HTID}.json"
-SSD_URL = "https://babel.hathitrust.org/cgi/ssd"          # OCR text (JSON)
-PT_URL = "https://babel.hathitrust.org/cgi/pt"             # Page viewer (HTML)
+SSD_URL = "https://babel.hathitrust.org/cgi/ssd"
+IMGSRV_OCR_URL = "https://babel.hathitrust.org/cgi/imgsrv/ocr"
+PT_URL = "https://babel.hathitrust.org/cgi/pt"
+PAGEMETA_URL = f"https://babel.hathitrust.org/cgi/htd/volume/pagemeta/{HTID}"
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     ),
     "Accept": "application/json, text/html, */*",
     "Accept-Language": "en-US,en;q=0.9",
@@ -54,9 +77,18 @@ HEADERS = {
 session = requests.Session()
 session.headers.update(HEADERS)
 
+# Load cookies if provided
+if COOKIE_STRING.strip():
+    for part in COOKIE_STRING.split(";"):
+        part = part.strip()
+        if "=" in part:
+            name, _, value = part.partition("=")
+            session.cookies.set(name.strip(), value.strip(), domain=".hathitrust.org")
+    print("Using provided browser cookies.")
+
 
 def get_catalog_info():
-    """Get book metadata from catalog API."""
+    """Get book metadata and page count from catalog API."""
     print(f"Fetching catalog metadata for {HTID}...")
     try:
         resp = session.get(CATALOG_URL, timeout=30)
@@ -72,25 +104,70 @@ def get_catalog_info():
                 if item.get("htid") == HTID:
                     rights = item.get("rightsCode", "unknown")
                     print(f"Rights: {rights}")
-                    if rights not in ("pd", "pdus", "pd-pvt"):
-                        print("Warning: This item may not be public domain in your region.")
+                    if rights == "pdus":
+                        print("Note: Public domain in US only (pdus). "
+                              "Access may require a US IP or HathiTrust login.")
+                    elif rights not in ("pd", "pd-pvt"):
+                        print(f"Warning: Rights code '{rights}' may restrict access.")
                     return item
     except Exception as e:
         print(f"Warning: Could not fetch catalog: {e}")
     return None
 
 
-def get_page_count_from_pt(seq=1):
+def get_page_count_from_catalog():
+    """Try to get page count from the catalog API response."""
+    try:
+        resp = session.get(CATALOG_URL, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        records = data.get("records", {})
+        if records:
+            first_record = next(iter(records.values()))
+            items = first_record.get("items", [])
+            for item in items:
+                if item.get("htid") == HTID:
+                    # Some items have a "lastUpdate" or page count fields
+                    count = item.get("itemURL", "")
+                    # Try enumerationChronology or other fields
+                    for field in ("enumerationChronology", "fromRecord"):
+                        val = item.get(field, "")
+                        if val:
+                            nums = re.findall(r'\d+', str(val))
+                            if nums:
+                                candidate = max(int(n) for n in nums)
+                                if 10 < candidate < 5000:
+                                    return candidate
+    except Exception:
+        pass
+    return None
+
+
+def get_page_count_from_pagemeta():
+    """Try the pagemeta API endpoint for page count."""
+    try:
+        resp = session.get(PAGEMETA_URL, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list):
+                return len(data)
+            elif isinstance(data, dict):
+                pages = data.get("page", data.get("pages", []))
+                if isinstance(pages, list):
+                    return len(pages)
+    except Exception:
+        pass
+    return None
+
+
+def get_page_count_from_pt():
     """Try to get total page count from the page viewer HTML."""
     try:
-        resp = session.get(PT_URL, params={"id": HTID, "seq": seq}, timeout=30)
+        resp = session.get(PT_URL, params={"id": HTID, "seq": 1}, timeout=30)
         resp.raise_for_status()
         if HAS_BS4:
             soup = BeautifulSoup(resp.text, "html.parser")
-            # Look for page count in various elements
-            for selector in [
-                "#mdPage", ".page-of", "#totalPages", "input[name='total']"
-            ]:
+            for selector in ["#mdPage", ".page-of", "#totalPages", "input[name='total']"]:
                 el = soup.select_one(selector)
                 if el:
                     text = el.get("value") or el.get_text(strip=True)
@@ -98,45 +175,38 @@ def get_page_count_from_pt(seq=1):
                         return int("".join(c for c in text if c.isdigit()))
                     except ValueError:
                         pass
-            # Try finding "of NNN" pattern in text
-            import re
             matches = re.findall(r'of\s+(\d+)', resp.text)
             if matches:
                 return max(int(m) for m in matches)
     except Exception as e:
-        print(f"Warning: Could not get page count from viewer: {e}")
+        print(f"  (Could not get page count from viewer: {e})")
     return None
 
 
 def get_page_text_ssd(seq):
     """
-    Fetch OCR text for a single page via the SSD (Snippet Service Download) endpoint.
-    Returns: text string, "" if empty/error, None if access denied
+    Fetch OCR text for a single page via the SSD endpoint.
+    Returns: text string | "" if empty | None if access denied | False if page missing
     """
     params = {"id": HTID, "seq": seq}
     try:
         resp = session.get(SSD_URL, params=params, timeout=30)
 
         if resp.status_code == 403:
-            return None  # Access denied
-
-        if resp.status_code == 404:
-            return False  # Page doesn't exist (signals end of book)
+            return None
+        if resp.status_code in (404, 400):
+            return False
 
         resp.raise_for_status()
 
         content_type = resp.headers.get("Content-Type", "")
-
-        # Try JSON first
         if "json" in content_type or resp.text.strip().startswith("{"):
             try:
                 data = resp.json()
                 if isinstance(data, dict):
-                    # Various possible keys HathiTrust uses
                     for key in ("text", "content", "OCR", "body", "page"):
                         if key in data and data[key]:
                             return str(data[key])
-                    # If dict but no known key, join all string values
                     text_parts = [v for v in data.values() if isinstance(v, str) and len(v) > 5]
                     return "\n".join(text_parts) if text_parts else ""
                 elif isinstance(data, str):
@@ -144,7 +214,6 @@ def get_page_text_ssd(seq):
             except json.JSONDecodeError:
                 pass
 
-        # Plain text response
         text = resp.text.strip()
         return text if text else ""
 
@@ -159,40 +228,92 @@ def get_page_text_ssd(seq):
         return ""
 
 
+def get_page_text_imgsrv(seq):
+    """
+    Fetch OCR text via the imgsrv/ocr endpoint (plain text response).
+    Returns: text string | "" if empty | None if access denied | False if page missing
+    """
+    params = {"id": HTID, "seq": seq}
+    try:
+        resp = session.get(IMGSRV_OCR_URL, params=params, timeout=30)
+
+        if resp.status_code == 403:
+            return None
+        if resp.status_code in (404, 400):
+            return False
+
+        resp.raise_for_status()
+        text = resp.text.strip()
+        return text if text else ""
+
+    except requests.exceptions.ConnectionError:
+        return ""
+    except requests.exceptions.Timeout:
+        print(f"\n  Page {seq}: Timeout, retrying...")
+        time.sleep(2)
+        return get_page_text_imgsrv(seq)
+    except Exception as e:
+        print(f"\n  Page {seq}: Error - {e}")
+        return ""
+
+
+def get_page_text(seq):
+    """Try SSD endpoint first, fall back to imgsrv/ocr."""
+    result = get_page_text_ssd(seq)
+    if result is None:
+        # SSD denied — try imgsrv/ocr
+        result = get_page_text_imgsrv(seq)
+    return result
+
+
 def detect_last_page(known_max=2000):
-    """Find the last valid page by binary search approach."""
+    """Find the last valid page using multiple strategies."""
     print("Detecting number of pages...")
 
-    # First check if we can get it from the HTML viewer
+    # Strategy 1: pagemeta API
+    total = get_page_count_from_pagemeta()
+    if total and total > 1:
+        print(f"Page count from pagemeta API: {total}")
+        return total
+
+    # Strategy 2: HTML viewer
     total = get_page_count_from_pt()
-    if total:
+    if total and total > 1:
         print(f"Page count from viewer: {total}")
         return total
 
-    # Binary search: find a page that 404s
+    # Strategy 3: Binary search via whichever OCR endpoint works
+    print("Scanning for last page (binary search)...")
     lo, hi = START_SEQ, known_max
     last_valid = START_SEQ
 
-    # Quick scan at large steps
     for seq in range(START_SEQ, known_max, 100):
-        params = {"id": HTID, "seq": seq}
         try:
-            resp = session.get(SSD_URL, params=params, timeout=10)
+            # Use imgsrv/ocr for probing — faster and less likely to be blocked
+            resp = session.get(IMGSRV_OCR_URL, params={"id": HTID, "seq": seq}, timeout=10)
             if resp.status_code == 200:
                 last_valid = seq
                 hi = min(seq + 200, known_max)
             elif resp.status_code in (404, 400):
                 hi = seq
                 break
+            elif resp.status_code == 403:
+                # Fall back to SSD for probing
+                resp2 = session.get(SSD_URL, params={"id": HTID, "seq": seq}, timeout=10)
+                if resp2.status_code == 200:
+                    last_valid = seq
+                    hi = min(seq + 200, known_max)
+                elif resp2.status_code in (404, 400):
+                    hi = seq
+                    break
         except Exception:
             break
         time.sleep(0.3)
 
-    # Fine-grained linear scan from last_valid
+    # Fine scan from last_valid
     for seq in range(last_valid, hi + 1):
-        params = {"id": HTID, "seq": seq}
         try:
-            resp = session.get(SSD_URL, params=params, timeout=10)
+            resp = session.get(IMGSRV_OCR_URL, params={"id": HTID, "seq": seq}, timeout=10)
             if resp.status_code == 200:
                 last_valid = seq
             elif resp.status_code in (404, 400):
@@ -214,30 +335,37 @@ def main():
     print("=" * 60)
     print()
 
-    # Get catalog info
-    catalog_item = get_catalog_info()
+    get_catalog_info()
     print()
 
-    # Detect last page
     last_page = detect_last_page()
-
     print(f"\nExtracting text from pages {START_SEQ} to {last_page}...\n")
 
     pages_text = []
     failed_pages = []
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 10
+    access_denied_count = 0
 
     for seq in range(START_SEQ, last_page + 1):
         print(f"\rPage {seq}/{last_page} — {len(pages_text)} extracted", end="", flush=True)
 
-        result = get_page_text_ssd(seq)
+        result = get_page_text(seq)
 
         if result is None:
-            print(f"\n\nAccess denied at page {seq}.")
-            print("This book may require a HathiTrust login.")
-            print("Try: log into hathitrust.org in your browser, then rerun this script.")
-            break
+            access_denied_count += 1
+            if access_denied_count >= 3:
+                print(f"\n\nAccess denied on multiple pages (including page {seq}).")
+                print("\nThis book is 'pdus' — public domain in the US, but geo-restricted.")
+                print("To fix this, you need to provide your HathiTrust browser cookies.")
+                print("\nSteps:")
+                print("  1. Log in at https://www.hathitrust.org")
+                print("  2. Open the book in your browser")
+                print("  3. Open DevTools → Network tab → refresh")
+                print("  4. Click any babel.hathitrust.org request")
+                print("  5. Copy the 'Cookie:' header value")
+                print("  6. Paste it into COOKIE_STRING at the top of this script")
+                break
         elif result is False:
             print(f"\nPage {seq} not found — end of book.")
             break
@@ -248,10 +376,11 @@ def main():
                 print(f"\nToo many consecutive empty pages at {seq}. Stopping.")
                 break
         else:
+            access_denied_count = 0
             consecutive_failures = 0
             pages_text.append((seq, result))
 
-        time.sleep(0.5)  # Be polite
+        time.sleep(0.5)
 
     print(f"\n\nDone. Extracted text from {len(pages_text)} pages.")
     if failed_pages:
@@ -260,12 +389,10 @@ def main():
 
     if not pages_text:
         print("\nNo text extracted. Possible reasons:")
-        print("  1. Book requires HathiTrust login (public domain in US, but geo-restricted)")
-        print("  2. Network blocked HathiTrust")
-        print("  3. Book ID is incorrect")
+        print("  1. Book requires HathiTrust login (pdus = US-only access)")
+        print("  2. See COOKIE_STRING instructions at the top of this script")
         sys.exit(1)
 
-    # Write output file
     print(f"\nWriting {OUTPUT_FILE}...")
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(f"HathiTrust Book Extraction\n")
