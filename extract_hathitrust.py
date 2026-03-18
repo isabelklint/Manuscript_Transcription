@@ -66,6 +66,10 @@ def get_page_text(driver, seq):
 
     body = driver.find_element(By.TAG_NAME, "body").text.strip()
 
+    # Rate-limited (429) — back off and signal caller to retry
+    if "429" in driver.title or "429" in body[:200] or "try again later" in body.lower():
+        return "RATE_LIMITED"
+
     # If we got an HTML error page instead of text
     if "<html" in body.lower() or len(body) < 2:
         return ""
@@ -149,17 +153,28 @@ def main():
             print(f"\rPage {seq}/{TOTAL_PAGES} — {extracted} new this run", end="", flush=True)
 
             retries = 0
-            while retries <= 2:
+            backoff = 30  # seconds to wait on first 429
+            while retries <= 4:
                 try:
                     result = get_page_text(driver, seq)
+                    if result == "RATE_LIMITED":
+                        print(f"\nRate limited at page {seq}. Waiting {backoff}s...")
+                        time.sleep(backoff)
+                        backoff = min(backoff * 2, 300)  # cap at 5 min
+                        retries += 1
+                        continue
                     break
                 except (NoSuchWindowException, WebDriverException) as e:
-                    if retries == 2:
+                    if retries == 4:
                         print(f"\nChrome unrecoverable at page {seq}: {e}")
                         raise
                     print(f"\nChrome crashed at page {seq}, restarting (attempt {retries+1})...")
                     driver = restart_driver(driver)
                     retries += 1
+            else:
+                print(f"\nGave up on page {seq} after repeated rate limiting.")
+                failed_pages.append(seq)
+                result = ""
 
             if result is None:
                 print(f"\nStuck on Cloudflare at page {seq}. Stopping.")
@@ -176,7 +191,7 @@ def main():
                     f.write("\n")
                 extracted += 1
 
-            time.sleep(0.5)
+            time.sleep(3)  # polite delay to avoid rate limiting
 
     finally:
         try:
